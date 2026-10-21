@@ -126,7 +126,41 @@ def main():
                 (folder / "config/entry.key").write_text("rotated-entry-key-" + "y" * 40)
                 assert request("/api/auth/entry/verify", cookie=cookie)[0] == 403
                 assert success("/api/account/clashSubscribe", token=token3) == rotated
+                # Registration is username-only. Generated credentials are disclosed once, not in account info.
+                system = success("/api/system/selectSystemByName", token=token3)
+                system.update(registerEnable=1, captchaEnable=0, registerQuota=1, registerExpireDays=1)
+                success("/api/system/updateSystemById", "POST", system, token3)
+                rejected("/api/auth/register", "POST", {"username": "manualuser", "pass": "supplied-password-123"})
+                status, registration, headers = request("/api/auth/register", "POST", {"username": "fixtureuser"})
+                assert status == 200 and registration["code"] == 20000
+                assert headers.get("Cache-Control") == "no-store"
+                credentials = registration["data"]
+                assert credentials["username"] == "fixtureuser" and len(credentials["initialPassword"]) == 16
+                assert "token" not in credentials
+                user_password = credentials["initialPassword"]
+                rejected("/api/auth/register", "POST", {"username": "fixtureuser"})
+                user_token = success("/api/auth/login", "POST", {"username": "fixtureuser", "pass": user_password})["token"]
+                user_info = success("/api/account/getAccountInfo", token=user_token)
+                assert "initialPassword" not in user_info and "password" not in user_info
+                rejected("/api/account/updateAccountPass", "POST", {"oldPass": user_password, "newPass": "forbidden-user-password"}, user_token)
+                reset_payload = {"id": user_info["id"], "username": "fixtureuser", "roleId": 3,
+                                 "deleted": 0, "quota": 1, "expireTime": int(time.time() * 1000) + 86400000,
+                                 "pass": "admin-reset-password-123"}
+                rejected("/api/account/updateAccountById", "POST", reset_payload, user_token)
+                user_subscription = success("/api/account/clashSubscribe", token=user_token)
+                success("/api/account/updateAccountById", "POST", reset_payload, token3)
+                rejected("/api/security/status", token=user_token)
+                rejected("/api/auth/login", "POST", {"username": "fixtureuser", "pass": user_password})
+                user_token = success("/api/auth/login", "POST", {"username": "fixtureuser", "pass": reset_payload["pass"]})["token"]
+                assert success("/api/account/clashSubscribe", token=user_token) == user_subscription
+                system["captchaEnable"] = 1
+                success("/api/system/updateSystemById", "POST", system, token3)
+                rejected("/api/auth/register", "POST", {"username": "captchatest"})
+                system.update(captchaEnable=0, registerEnable=0)
+                success("/api/system/updateSystemById", "POST", system, token3)
+                rejected("/api/auth/register", "POST", {"username": "closeduser"})
                 print("API acceptance passed: login, MFA, recovery, session revocation, subscription isolation and entry gate")
+                print("Registration passed: generated credentials, login, admin-only password changes, reset revocation, captcha and closed registration")
             finally:
                 process.terminate()
                 try:

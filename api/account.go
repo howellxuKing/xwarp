@@ -116,9 +116,16 @@ func GenerateCaptcha(c *gin.Context) {
 
 func Register(c *gin.Context) {
 	var accountRegisterDto dto.AccountRegisterDto
-	_ = c.ShouldBindJSON(&accountRegisterDto)
+	if err := c.ShouldBindJSON(&accountRegisterDto); err != nil {
+		vo.Fail(constant.ValidateFailed, c)
+		return
+	}
 	if err := validate.Struct(&accountRegisterDto); err != nil {
 		vo.Fail(constant.ValidateFailed, c)
+		return
+	}
+	if accountRegisterDto.Pass != nil {
+		vo.Fail("注册密码由系统自动生成，请刷新页面后重新注册", c)
 		return
 	}
 	systemName := constant.SystemName
@@ -131,11 +138,14 @@ func Register(c *gin.Context) {
 		vo.Fail(constant.CaptchaError, c)
 		return
 	}
-	if err := service.Register(accountRegisterDto); err != nil {
+	credentials, err := service.Register(accountRegisterDto)
+	if err != nil {
 		vo.Fail(err.Error(), c)
 		return
 	}
-	vo.Success(nil, c)
+	c.Header("Cache-Control", "no-store")
+	c.Header("Pragma", "no-cache")
+	vo.Success(credentials, c)
 }
 
 func Logout(c *gin.Context) {
@@ -235,13 +245,17 @@ func DeleteAccountById(c *gin.Context) {
 }
 
 func UpdateAccountPass(c *gin.Context) {
+	account := service.GetCurrentAccount(c)
+	if account.RoleId != constant.SYSADMIN && account.RoleId != constant.ADMIN {
+		vo.Fail(constant.ForbiddenError, c)
+		return
+	}
 	var accountUpdatePassDto dto.AccountUpdatePassDto
 	_ = c.ShouldBindJSON(&accountUpdatePassDto)
 	if err := validate.Struct(&accountUpdatePassDto); err != nil {
 		vo.Fail(constant.ValidateFailed, c)
 		return
 	}
-	account := service.GetCurrentAccount(c)
 	username, nodePassword, credentialErr := dao.SecurityAccount(account.Id)
 	if credentialErr != nil || dao.Security.CheckPassword(account.Id, username, nodePassword, *accountUpdatePassDto.OldPass) != nil || dao.Security.CheckMFA(account.Id, accountUpdatePassDto.OTP) != nil {
 		vo.Fail("动态验证码或恢复码错误", c)
@@ -299,6 +313,11 @@ func GetAccountInfo(c *gin.Context) {
 }
 
 func UpdateAccountById(c *gin.Context) {
+	current := service.GetCurrentAccount(c)
+	if current.RoleId != constant.SYSADMIN && current.RoleId != constant.ADMIN {
+		vo.Fail(constant.ForbiddenError, c)
+		return
+	}
 	var accountUpdateDto dto.AccountUpdateDto
 	_ = c.ShouldBindJSON(&accountUpdateDto)
 	if err := validate.Struct(&accountUpdateDto); err != nil {

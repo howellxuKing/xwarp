@@ -102,6 +102,9 @@ func UpdateAccountPass(token string, oldPass *string, newPass *string, username 
 	if err != nil || account == nil {
 		return errors.New(constant.OriPassError)
 	}
+	if *account.RoleId != constant.SYSADMIN && *account.RoleId != constant.ADMIN {
+		return errors.New(constant.ForbiddenError)
+	}
 	if err = dao.Security.CheckPassword(*account.Id, *account.Username, *account.Pass, *oldPass); err != nil {
 		return errors.New(constant.OriPassError)
 	}
@@ -165,22 +168,26 @@ func UpdateAccountById(token string, account *model.Account) error {
 	return nil
 }
 
-func Register(accountRegisterDto dto.AccountRegisterDto) error {
+func Register(accountRegisterDto dto.AccountRegisterDto) (*vo.AccountRegistrationVo, error) {
 	name := constant.SystemName
 	systemVo, err := SelectSystemByName(&name)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if systemVo.RegisterEnable == 0 {
-		return errors.New(constant.AccountRegisterClosed)
+		return nil, errors.New(constant.AccountRegisterClosed)
 	}
 
 	count, err := dao.CountAccountByUsername(accountRegisterDto.Username)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if count > 0 {
-		return errors.New(constant.UsernameExist)
+		return nil, errors.New(constant.UsernameExist)
+	}
+	password, err := security.RandomPassword(16)
+	if err != nil {
+		return nil, err
 	}
 	u := constant.USER
 	milli := util.DayToMilli(systemVo.RegisterExpireDays)
@@ -189,16 +196,16 @@ func Register(accountRegisterDto dto.AccountRegisterDto) error {
 	account := model.Account{
 		Quota:         &registerQuota,
 		Username:      accountRegisterDto.Username,
-		Pass:          accountRegisterDto.Pass,
+		Pass:          &password,
 		RoleId:        &u,
 		Deleted:       new(uint),
 		LastLoginTime: &lastLoginTime,
 		ExpireTime:    &milli,
 	}
 	if err = dao.CreateAccount(&account); err != nil {
-		return err
+		return nil, err
 	}
-	return nil
+	return &vo.AccountRegistrationVo{Username: *accountRegisterDto.Username, InitialPassword: password}, nil
 }
 
 // PullAccountWhiteOrBlackByUsername 拉白或者拉黑用户 此操作会清空用户流量

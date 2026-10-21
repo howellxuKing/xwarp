@@ -30,6 +30,11 @@ type AccountLoginVo struct {
 	Token string `json:"token"`
 }
 
+type AccountRegistrationVo struct {
+	Username        string `json:"username"`
+	InitialPassword string `json:"initialPassword"`
+}
+
 type AccountInfo struct {
 	Id       uint     `json:"id"`
 	Username string   `json:"username"`

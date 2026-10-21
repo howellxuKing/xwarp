@@ -62,7 +62,8 @@ type AccountLoginDto struct {
 
 type AccountRegisterDto struct {
 	Username *string `json:"username" form:"username" validate:"required,min=6,max=20,validateStr,excludes=admin"`
-	Pass     *string `json:"pass" form:"pass" validate:"required,min=16,max=72"`
+	// Retained only to reject outdated clients that still supply a registration password.
+	Pass     *string `json:"pass" form:"pass" validate:"omitempty,max=72"`
 	CaptureDto
 }
 
