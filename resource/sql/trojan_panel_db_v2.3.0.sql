@@ -431,7 +431,7 @@ CREATE TABLE `system` (
   `name` varchar(16) NOT NULL DEFAULT '' COMMENT '系统名称',
   `account_config` varchar(512) NOT NULL DEFAULT '' COMMENT '用户设置',
   `email_config` varchar(512) NOT NULL DEFAULT '' COMMENT '系统邮箱设置',
-  `template_config` varchar(512) NOT NULL DEFAULT '' COMMENT '模板设置',
+  `template_config` text NOT NULL COMMENT '模板设置',
   `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
   PRIMARY KEY (`id`)

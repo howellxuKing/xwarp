@@ -1,9 +1,11 @@
 package middleware
 
 import (
+	"crypto/subtle"
 	"fmt"
 	"github.com/gin-gonic/gin"
 	"strings"
+	"trojan-panel/dao"
 	"trojan-panel/dao/redis"
 	"trojan-panel/model/constant"
 	"trojan-panel/model/vo"
@@ -39,10 +41,16 @@ func JWTHandler() gin.HandlerFunc {
 			c.Abort()
 			return
 		}
+		current, accountErr := dao.SelectAccountByUsername(&myClaims.AccountVo.Username)
+		if accountErr != nil || current == nil || *current.Deleted != 0 || *current.RoleId != myClaims.AccountVo.RoleId || *current.Id != myClaims.AccountVo.Id {
+			vo.Fail(constant.IllegalTokenError, c)
+			c.Abort()
+			return
+		}
 		get := redis.Client.String.
 			Get(fmt.Sprintf("trojan-panel:token:%s", myClaims.AccountVo.Username))
 		result, err := get.String()
-		if err != nil || result == "" {
+		if err != nil || result == "" || subtle.ConstantTimeCompare([]byte(result), []byte(parts[1])) != 1 {
 			vo.Fail(constant.IllegalTokenError, c)
 			c.Abort()
 			return

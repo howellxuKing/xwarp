@@ -22,17 +22,14 @@ func Login(c *gin.Context) {
 		vo.Fail(constant.ValidateFailed, c)
 		return
 	}
-	if err := service.LoginVerify(*accountLoginDto.Username); err != nil {
-		vo.Fail(err.Error(), c)
-		return
-	}
+
 	systemName := constant.SystemName
 	systemVo, err := service.SelectSystemByName(&systemName)
 	if err != nil {
 		vo.Fail(err.Error(), c)
 		return
 	}
-	if systemVo.CaptchaEnable == 1 && !util.VerifyCaptcha(*accountLoginDto.CaptchaId, *accountLoginDto.CaptchaCode) {
+	if systemVo.CaptchaEnable == 1 && (accountLoginDto.CaptchaId == nil || accountLoginDto.CaptchaCode == nil || !util.VerifyCaptcha(*accountLoginDto.CaptchaId, *accountLoginDto.CaptchaCode)) {
 		vo.Fail(constant.CaptchaError, c)
 		return
 	}
@@ -42,9 +39,8 @@ func Login(c *gin.Context) {
 		return
 	}
 	if account != nil {
-		if !util.Sha1Match(*account.Pass, fmt.Sprintf("%s%s", *accountLoginDto.Username, *accountLoginDto.Pass)) {
+		if dao.Security.CheckPassword(*account.Id, *account.Username, *account.Pass, *accountLoginDto.Pass) != nil || dao.Security.CheckMFA(*account.Id, accountLoginDto.OTP) != nil {
 			vo.Fail(constant.UsernameOrPassError, c)
-			service.LoginLimit(*account.Username)
 			return
 		}
 		if *account.Deleted != 0 {
@@ -131,7 +127,7 @@ func Register(c *gin.Context) {
 		vo.Fail(err.Error(), c)
 		return
 	}
-	if systemVo.CaptchaEnable == 1 && !util.VerifyCaptcha(*accountRegisterDto.CaptchaId, *accountRegisterDto.CaptchaCode) {
+	if systemVo.CaptchaEnable == 1 && (accountRegisterDto.CaptchaId == nil || accountRegisterDto.CaptchaCode == nil || !util.VerifyCaptcha(*accountRegisterDto.CaptchaId, *accountRegisterDto.CaptchaCode)) {
 		vo.Fail(constant.CaptchaError, c)
 		return
 	}
@@ -246,11 +242,17 @@ func UpdateAccountPass(c *gin.Context) {
 		return
 	}
 	account := service.GetCurrentAccount(c)
+	username, nodePassword, credentialErr := dao.SecurityAccount(account.Id)
+	if credentialErr != nil || dao.Security.CheckPassword(account.Id, username, nodePassword, *accountUpdatePassDto.OldPass) != nil || dao.Security.CheckMFA(account.Id, accountUpdatePassDto.OTP) != nil {
+		vo.Fail("动态验证码或恢复码错误", c)
+		return
+	}
 	if err := service.UpdateAccountPass(util.GetToken(c), accountUpdatePassDto.OldPass, accountUpdatePassDto.NewPass,
 		&account.Username); err != nil {
 		vo.Fail(err.Error(), c)
 		return
 	}
+	_ = redis.Client.Key.RetryDel(fmt.Sprintf("trojan-panel:token:%s", account.Username))
 	vo.Success(nil, c)
 }
 
@@ -262,13 +264,18 @@ func UpdateAccountProperty(c *gin.Context) {
 		return
 	}
 	account := service.GetCurrentAccount(c)
+	username, nodePassword, credentialErr := dao.SecurityAccount(account.Id)
+	if credentialErr != nil || dao.Security.CheckPassword(account.Id, username, nodePassword, *accountUpdatePropertyDto.Pass) != nil || dao.Security.CheckMFA(account.Id, accountUpdatePropertyDto.OTP) != nil {
+		vo.Fail("动态验证码或恢复码错误", c)
+		return
+	}
 	// 校验用户名是否重复
 	count, err := service.CountAccountByUsername(accountUpdatePropertyDto.Username)
 	if err != nil {
 		vo.Fail(err.Error(), c)
 		return
 	}
-	if count > 0 {
+	if count > 0 && accountUpdatePropertyDto.Username != nil && *accountUpdatePropertyDto.Username != account.Username {
 		vo.Fail(constant.UsernameExist, c)
 		return
 	}
@@ -278,6 +285,7 @@ func UpdateAccountProperty(c *gin.Context) {
 		vo.Fail(err.Error(), c)
 		return
 	}
+	_ = redis.Client.Key.RetryDel(fmt.Sprintf("trojan-panel:token:%s", account.Username))
 	vo.Success(nil, c)
 }
 
@@ -307,6 +315,19 @@ func UpdateAccountById(c *gin.Context) {
 		}
 		if *account.RoleId == constant.SYSADMIN {
 			vo.Fail(constant.NoDisableSysadmin, c)
+			return
+		}
+	}
+
+	// Protect administrator login resets from bypassing self-service MFA checks.
+	if accountUpdateDto.Pass != nil && *accountUpdateDto.Pass != "" {
+		target, err := service.SelectAccountById(accountUpdateDto.Id)
+		if err != nil {
+			vo.Fail(err.Error(), c)
+			return
+		}
+		if *target.RoleId == constant.SYSADMIN {
+			vo.Fail("管理员密码请在个人设置中验证后修改，遗失时使用服务器本地恢复命令", c)
 			return
 		}
 	}

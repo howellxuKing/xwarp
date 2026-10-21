@@ -6,6 +6,7 @@ import (
 	"trojan-panel/model/constant"
 	"trojan-panel/model/dto"
 	"trojan-panel/model/vo"
+	"trojan-panel/security"
 	"trojan-panel/service"
 	"trojan-panel/util"
 )
@@ -47,6 +48,20 @@ func CreateNode(c *gin.Context) {
 		vo.Fail(constant.ValidateFailed, c)
 		return
 	}
+	if nodeCreateDto.XrayStreamSettings != nil && nodeCreateDto.XrayProtocol != nil {
+		flow, key := "", ""
+		if nodeCreateDto.XrayFlow != nil {
+			flow = *nodeCreateDto.XrayFlow
+		}
+		if nodeCreateDto.RealityPbk != nil {
+			key = *nodeCreateDto.RealityPbk
+		}
+		if err := security.ValidateXray(*nodeCreateDto.XrayProtocol, flow, key, *nodeCreateDto.XrayStreamSettings); err != nil {
+			vo.Fail(err.Error(), c)
+			return
+		}
+	}
+
 	if err := service.CreateNode(util.GetToken(c), nodeCreateDto); err != nil {
 		vo.Fail(err.Error(), c)
 		return
@@ -93,6 +108,20 @@ func UpdateNodeById(c *gin.Context) {
 		vo.Fail(constant.ValidateFailed, c)
 		return
 	}
+	if nodeUpdateDto.XrayStreamSettings != nil && nodeUpdateDto.XrayProtocol != nil {
+		flow, key := "", ""
+		if nodeUpdateDto.XrayFlow != nil {
+			flow = *nodeUpdateDto.XrayFlow
+		}
+		if nodeUpdateDto.RealityPbk != nil {
+			key = *nodeUpdateDto.RealityPbk
+		}
+		if err := security.ValidateXray(*nodeUpdateDto.XrayProtocol, flow, key, *nodeUpdateDto.XrayStreamSettings); err != nil {
+			vo.Fail(err.Error(), c)
+			return
+		}
+	}
+
 	if err := service.UpdateNodeById(util.GetToken(c), &nodeUpdateDto); err != nil {
 		vo.Fail(err.Error(), c)
 		return

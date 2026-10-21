@@ -13,19 +13,20 @@ import (
 )
 
 var (
-	host           string
-	user           string
-	password       string
-	port           string
-	redisHost      string
-	redisPort      string
-	redisPassword  string
-	redisDb        string
-	redisMaxIdle   string
-	redisMaxActive string
-	redisWait      string
-	serverPort     string
-	version        bool
+	host               string
+	user               string
+	password           string
+	port               string
+	redisHost          string
+	redisPort          string
+	redisPassword      string
+	redisDb            string
+	redisMaxIdle       string
+	redisMaxActive     string
+	redisWait          string
+	serverPort         string
+	version            bool
+	ResetAdminPassword bool
 )
 
 func init() {
@@ -42,6 +43,7 @@ func init() {
 	flag.StringVar(&redisWait, "redisWait", "true", "does Redis wait")
 	flag.StringVar(&serverPort, "serverPort", "8081", "service port")
 	flag.BoolVar(&version, "version", false, "print version info")
+	flag.BoolVar(&ResetAdminPassword, "resetAdminPassword", false, "reset administrator login and MFA locally; node credentials remain unchanged")
 	flag.Usage = usage
 	flag.Parse()
 	if version {

@@ -13,6 +13,7 @@ import (
 	"trojan-panel/model/constant"
 	"trojan-panel/model/dto"
 	"trojan-panel/model/vo"
+	"trojan-panel/security"
 	"trojan-panel/util"
 )
 
@@ -78,6 +79,7 @@ func DeleteAccountById(token string, id *uint) error {
 	if err != nil {
 		return err
 	}
+	defer redis.RsUnLock(mutex)
 	password, err := dao.SelectConnectPassword(id, nil)
 	if err != nil {
 		return err
@@ -88,7 +90,6 @@ func DeleteAccountById(token string, id *uint) error {
 	if err = dao.DeleteAccountById(id); err != nil {
 		return err
 	}
-	redis.RsUnLock(mutex)
 	return nil
 }
 
@@ -97,48 +98,25 @@ func SelectAccountByUsername(username *string) (*model.Account, error) {
 }
 
 func UpdateAccountPass(token string, oldPass *string, newPass *string, username *string) error {
-	mutex, err := redis.RsLock(constant.UpdateAccountPassLock)
-	if err != nil {
-		return err
-	}
-
 	account, err := SelectAccountByUsername(username)
-	if err != nil || !util.Sha1Match(*account.Pass, fmt.Sprintf("%s%s", *username, *oldPass)) {
+	if err != nil || account == nil {
 		return errors.New(constant.OriPassError)
 	}
-
-	if err = RemoveAccount(token, *account.Pass); err != nil {
-		return err
+	if err = dao.Security.CheckPassword(*account.Id, *account.Username, *account.Pass, *oldPass); err != nil {
+		return errors.New(constant.OriPassError)
 	}
-
-	if err := dao.UpdateAccountPass(oldPass, newPass, username); err != nil {
-		return err
-	}
-	redis.RsUnLock(mutex)
-	return nil
+	return dao.Security.SetPassword(*account.Id, *newPass)
 }
 
 func UpdateAccountProperty(token string, oldUsername *string, pass *string, username *string, email *string) error {
-	mutex, err := redis.RsLock(constant.UpdateAccountPropertyLock)
-	if err != nil {
-		return err
-	}
 	account, err := SelectAccountByUsername(oldUsername)
-	if err != nil || !util.Sha1Match(*account.Pass, fmt.Sprintf("%s%s", *oldUsername, *pass)) {
+	if err != nil || account == nil {
 		return errors.New(constant.OriPassError)
 	}
-
-	if pass != nil && *pass != "" && username != nil && *username != "" {
-		if err = RemoveAccount(token, *account.Pass); err != nil {
-			return err
-		}
+	if err = dao.Security.CheckPassword(*account.Id, *account.Username, *account.Pass, *pass); err != nil {
+		return errors.New(constant.OriPassError)
 	}
-
-	if err := dao.UpdateAccountProperty(oldUsername, pass, username, email); err != nil {
-		return err
-	}
-	redis.RsUnLock(mutex)
-	return nil
+	return dao.RenameAccount(*account.Id, username, email)
 }
 
 // GetAccountInfo 获取当前请求账户信息
@@ -161,15 +139,17 @@ func UpdateAccountById(token string, account *model.Account) error {
 	if err != nil {
 		return err
 	}
+	defer redis.RsUnLock(mutex)
 	if account.Pass != nil && *account.Pass != "" {
-		password, err := dao.SelectConnectPassword(account.Id, nil)
+		username, _, err := dao.SecurityAccount(*account.Id)
 		if err != nil {
 			return err
 		}
-		if err = RemoveAccount(token, password); err != nil {
+		if err := redis.Client.Key.RetryDel("trojan-panel:token:" + username); err != nil {
 			return err
 		}
 	}
+
 	if err := dao.UpdateAccountById(account); err != nil {
 		return err
 	}
@@ -182,7 +162,6 @@ func UpdateAccountById(token string, account *model.Account) error {
 			return err
 		}
 	}
-	redis.RsUnLock(mutex)
 	return nil
 }
 
@@ -367,7 +346,10 @@ func LoginVerify(username string) error {
 func CreateAccountBatch(accountId uint, accountUsername string, dto dto.CreateAccountBatchDto) error {
 	var exportVos []vo.AccountUnusedExportVo
 	for i := 0; i < *dto.Num; i++ {
-		randStr := util.RandString(12)
+		randStr, randomErr := security.RandomPassword(16)
+		if randomErr != nil {
+			return randomErr
+		}
 		role := constant.USER
 		toByte := util.ToByte(*dto.PresetQuota)
 		account := model.Account{

@@ -3,12 +3,12 @@ package service
 import (
 	"errors"
 	"github.com/golang-jwt/jwt"
-	redisgo "github.com/gomodule/redigo/redis"
 	"time"
+	"trojan-panel/dao"
 	"trojan-panel/dao/redis"
 	"trojan-panel/model/constant"
 	"trojan-panel/model/vo"
-	"trojan-panel/util"
+	"trojan-panel/security"
 )
 
 // TokenExpireDuration 过期时间默认12小时
@@ -21,11 +21,17 @@ type MyClaims struct {
 
 // GenToken 生成Token
 func GenToken(accountVo vo.AccountVo) (string, error) {
+	id, err := security.RandomPassword(32)
+	if err != nil {
+		return "", err
+	}
 	// 创建一个我们自己的声明
 	c := MyClaims{
 		// 自定义字段
 		AccountVo: accountVo,
 		StandardClaims: jwt.StandardClaims{
+			Id:       id,
+			IssuedAt: time.Now().Unix(),
 			// 过期时间
 			ExpiresAt: time.Now().Add(TokenExpireDuration).Unix(),
 			// 签发人
@@ -50,6 +56,9 @@ func ParseToken(tokenString string) (*MyClaims, error) {
 	}
 	// 解析Token
 	token, err := jwt.ParseWithClaims(tokenString, &MyClaims{}, func(token *jwt.Token) (i interface{}, err error) {
+		if token.Method != jwt.SigningMethodHS256 {
+			return nil, errors.New(constant.IllegalTokenError)
+		}
 		return mySecret, nil
 	})
 	if err != nil {
@@ -63,21 +72,14 @@ func ParseToken(tokenString string) (*MyClaims, error) {
 }
 
 func GetJWTKey() ([]byte, error) {
-	get := redis.Client.String.
-		Get("trojan-panel:jwt-key")
-	reply, err := get.Bytes()
-	if err != nil && err != redisgo.ErrNil {
-		return nil, errors.New(constant.SysError)
-	}
-	if len(reply) > 0 {
-		return reply, nil
-	} else {
-		// jwt key 72小时更新一次
-		key := []byte(util.RandString(32))
-		_, err := redis.Client.String.Set("trojan-panel:jwt-key", key, time.Hour.Milliseconds()*72/1000).Result()
-		if err != nil {
-			return nil, errors.New(constant.SysError)
-		}
+	key := dao.Security.JWTKey()
+	// The unchanged core reads this shared key from Redis for gRPC authentication.
+	current, err := redis.Client.String.Get("trojan-panel:jwt-key").Bytes()
+	if err == nil && string(current) == string(key) {
 		return key, nil
 	}
+	if _, err := redis.Client.String.Set("trojan-panel:jwt-key", key).Result(); err != nil {
+		return nil, errors.New(constant.SysError)
+	}
+	return key, nil
 }

@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"trojan-panel/dao"
 	"trojan-panel/model/constant"
 	"trojan-panel/model/dto"
 	"trojan-panel/model/vo"
@@ -17,12 +18,13 @@ import (
 // ClashSubscribe 获取Clash订阅地址
 func ClashSubscribe(c *gin.Context) {
 	accountVo := service.GetCurrentAccount(c)
-	password, err := service.SelectConnectPassword(&accountVo.Id, &accountVo.Username)
+	token, err := dao.Security.Subscription(accountVo.Id, false)
 	if err != nil {
-		vo.Fail(err.Error(), c)
+		vo.Fail("读取订阅失败", c)
 		return
 	}
-	vo.Success(fmt.Sprintf("/api/auth/subscribe/%s", base64.StdEncoding.EncodeToString([]byte(password))), c)
+	c.Header("Cache-Control", "no-store")
+	vo.Success(SubscriptionURL(token), c)
 }
 
 // ClashSubscribeForSb 获取指定人的Clash订阅地址
@@ -33,25 +35,28 @@ func ClashSubscribeForSb(c *gin.Context) {
 		vo.Fail(constant.ValidateFailed, c)
 		return
 	}
-	password, err := service.SelectConnectPassword(accountRequiredIdDto.Id, nil)
+	token, err := dao.Security.Subscription(*accountRequiredIdDto.Id, false)
 	if err != nil {
-		vo.Fail(err.Error(), c)
+		vo.Fail("读取订阅失败", c)
 		return
 	}
-	vo.Success(fmt.Sprintf("/api/auth/subscribe/%s", base64.StdEncoding.EncodeToString([]byte(password))), c)
+	c.Header("Cache-Control", "no-store")
+	vo.Success(SubscriptionURL(token), c)
 }
 
 // Subscribe 订阅
 func Subscribe(c *gin.Context) {
 	token := c.Param("token")
-	//userAgent := c.Request.Header.Get("User-Agent")
-	tokenDecode, err := base64.StdEncoding.DecodeString(token)
+	_, pass, err := dao.Security.ResolveSubscription(token)
 	if err != nil {
-		vo.Fail(constant.SysError, c)
-		return
+		decoded, decodeErr := base64.StdEncoding.DecodeString(token)
+		if decodeErr != nil || !dao.Security.LegacySubscriptionAllowed(string(decoded)) {
+			c.AbortWithStatus(404)
+			return
+		}
+		pass = string(decoded)
 	}
-	pass := string(tokenDecode)
-
+	c.Header("Cache-Control", "no-store")
 	//if strings.HasPrefix(userAgent, constant.ClashforWindows) {
 	account, userInfo, clashConfigYaml, _, err := service.SubscribeClash(pass)
 	if err != nil {

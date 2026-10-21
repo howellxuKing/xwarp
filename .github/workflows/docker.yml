@@ -1,9 +1,13 @@
-name: build-and-push
+name: release-build-check
 
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
+    inputs:
+      publish_release:
+        description: 'Publish checked public release images'
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -12,29 +16,86 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      cache:
+        image: redis:6.2.7
+        ports:
+          - 6379:6379
+      database:
+        image: mariadb:10.7.3
+        env:
+          MYSQL_ROOT_PASSWORD: isolated-test-password
+          MYSQL_DATABASE: xwarp_security_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mariadb-admin ping -h localhost -p'isolated-test-password'"
+          --health-interval=5s --health-timeout=5s --health-retries=20
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.22'
+          go-version: '1.27.2'
+
+      - name: Check security utilities
+        env:
+          XWARP_TEST_MYSQL_DSN: root:isolated-test-password@tcp(127.0.0.1:3306)/xwarp_security_test
+        run: go test -race ./security
 
       - name: Build backend binary (linux/amd64)
         run: |
           mkdir -p build
           CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o build/trojan-panel-linux-amd64 -trimpath -ldflags "-s -w" .
 
+      - name: Isolated API acceptance
+        env:
+          XWARP_CI: '1'
+        run: python3 tests/api_acceptance.py --binary build/trojan-panel-linux-amd64 --database-container ${{ job.services.database.id }} --redis-container ${{ job.services.cache.id }}
+
       - uses: docker/setup-buildx-action@v3
 
       - uses: docker/login-action@v3
+        if: ${{ inputs.publish_release }}
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - uses: docker/build-push-action@v6
+        id: image
         with:
           context: .
           platforms: linux/amd64
-          push: true
-          tags: ghcr.io/howellxuking/xwarp:latest
+          push: ${{ inputs.publish_release }}
+          tags: |
+            ghcr.io/howellxuking/xwarp:sha-${{ github.sha }}
+            ghcr.io/howellxuking/xwarp:latest
+          labels: org.opencontainers.image.source=https://github.com/howellxuKing/xwarp
+
+      - name: Verify public anonymous image pull
+        if: ${{ inputs.publish_release }}
+        env:
+          IMAGE_DIGEST: ${{ steps.image.outputs.digest }}
+        run: DOCKER_CONFIG="$(mktemp -d)" docker pull "ghcr.io/howellxuking/xwarp@$IMAGE_DIGEST"
+
+      - name: Record immutable image
+        if: ${{ inputs.publish_release }}
+        env:
+          IMAGE_DIGEST: ${{ steps.image.outputs.digest }}
+          IMAGE_COMMIT: ${{ github.sha }}
+        run: |
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          repository = "ghcr.io/howellxuking/xwarp"
+          Path("image-release.json").write_text(json.dumps({"repository": repository, "commit": os.environ["IMAGE_COMMIT"], "digest": os.environ["IMAGE_DIGEST"], "image": repository + "@" + os.environ["IMAGE_DIGEST"], "platform": "linux/amd64"}, indent=2))
+          PY
+
+      - uses: actions/upload-artifact@v4
+        if: ${{ inputs.publish_release }}
+        with:
+          name: image-release
+          path: image-release.json
+          retention-days: 30

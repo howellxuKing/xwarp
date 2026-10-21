@@ -39,7 +39,11 @@ func LogHandler() gin.HandlerFunc {
 		// 请求方式
 		reqMethod := c.Request.Method
 		// 请求路由
-		reqUri := c.Request.RequestURI
+		// Route templates exclude subscription tokens and all query parameters.
+		reqUri := c.FullPath()
+		if reqUri == "" {
+			reqUri = "/unmatched"
+		}
 		// 状态码
 		statusCode := c.Writer.Status()
 		// 请求IP
@@ -52,5 +56,18 @@ func LogHandler() gin.HandlerFunc {
 			"req_method":   reqMethod,
 			"req_uri":      reqUri,
 		}).Info()
+	}
+}
+
+// SafeRecovery avoids dumping requests, headers, or panic values containing secrets.
+func SafeRecovery() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		defer func() {
+			if recover() != nil {
+				logrus.Error("request handler panic")
+				c.AbortWithStatus(500)
+			}
+		}()
+		c.Next()
 	}
 }

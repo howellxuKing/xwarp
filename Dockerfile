@@ -1,4 +1,4 @@
-FROM alpine:3.15
+FROM alpine:3.24.2
 LABEL maintainer="jonsosnyan <https://jonssonyan.com>"
 WORKDIR /tpdata/trojan-panel/
 ENV mariadb_ip=127.0.0.1 \
@@ -19,7 +19,7 @@ COPY build/trojan-panel-${TARGETOS}-${TARGETARCH}${TARGETVARIANT} trojan-panel
 # RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories
 RUN apk add bash tzdata ca-certificates && \
     rm -rf /var/cache/apk/*
-ENTRYPOINT chmod 777 ./trojan-panel && \
+ENTRYPOINT chmod 755 ./trojan-panel && \
     ./trojan-panel \
     -host=${mariadb_ip} \
     -port=${mariadb_port} \

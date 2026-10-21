@@ -1,0 +1,23 @@
+name: public-package-check
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+  packages: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify associated image is public
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh api users/howellxuKing/packages/container/xwarp --jq '{name: .name, visibility: .visibility}' > package-visibility.json
+          python3 - <<'PY'
+          import json
+          assert json.load(open("package-visibility.json"))["visibility"] == "public", "Image is not public"
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: package-visibility
+          path: package-visibility.json

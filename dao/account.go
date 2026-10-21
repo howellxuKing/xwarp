@@ -6,9 +6,11 @@ import (
 	"github.com/didi/gendry/builder"
 	"github.com/didi/gendry/scanner"
 	"github.com/sirupsen/logrus"
+	"golang.org/x/crypto/bcrypt"
 	"trojan-panel/model"
 	"trojan-panel/model/constant"
 	"trojan-panel/model/vo"
+	"trojan-panel/security"
 	"trojan-panel/util"
 )
 
@@ -42,7 +44,10 @@ func SelectAccountById(id *uint) (*model.Account, error) {
 
 func CreateAccount(account *model.Account) error {
 	// 密码加密
-	encryPass := util.Sha1String(fmt.Sprintf("%s%s", *account.Username, *account.Pass))
+	encryPass, randomErr := security.RandomPassword(48)
+	if randomErr != nil {
+		return randomErr
+	}
 	hash := util.SHA224String(encryPass)
 
 	accountCreate := map[string]interface{}{
@@ -91,10 +96,21 @@ func CreateAccount(account *model.Account) error {
 		logrus.Errorln(err.Error())
 		return errors.New(constant.SysError)
 	}
-	if _, err = db.Exec(buildInsert, values...); err != nil {
-		logrus.Errorln(err.Error())
+	result, err := db.Exec(buildInsert, values...)
+	if err != nil {
 		return errors.New(constant.SysError)
 	}
+	id, err := result.LastInsertId()
+	if err != nil {
+		return err
+	}
+	accountID := uint(id)
+	account.Id = &accountID
+	if err = Security.NewAccount(accountID, *account.Pass); err != nil {
+		_, _ = db.Exec("DELETE FROM account WHERE id=?", accountID)
+		return err
+	}
+
 	return nil
 }
 
@@ -269,63 +285,22 @@ func SelectAccountByUsername(username *string) (*model.Account, error) {
 	return &account, nil
 }
 
-func UpdateAccountPass(oldPass *string, newPass *string, username *string) error {
-	where := map[string]interface{}{"username": *username}
-	update := map[string]interface{}{}
-	if oldPass != nil && *oldPass != "" && newPass != nil && *newPass != "" {
-		sha1String := util.Sha1String(fmt.Sprintf("%s%s", *username, *newPass))
-		update["pass"] = sha1String
-		update["hash"] = util.SHA224String(sha1String)
-	}
-	if len(update) > 0 {
-		buildUpdate, values, err := builder.BuildUpdate("account", where, update)
-		if err != nil {
-			logrus.Errorln(err.Error())
-			return errors.New(constant.SysError)
-		}
-
-		if _, err = db.Exec(buildUpdate, values...); err != nil {
-			logrus.Errorln(err.Error())
-			return errors.New(constant.SysError)
-		}
-	}
-	return nil
-}
-
-func UpdateAccountProperty(oldUsername *string, pass *string, username *string, email *string) error {
-	where := map[string]interface{}{"username": *oldUsername}
-	update := map[string]interface{}{}
-	if username != nil && *username != "" {
-		update["username"] = *username
-		sha1String := util.Sha1String(fmt.Sprintf("%s%s", *username, *pass))
-		update["pass"] = sha1String
-		update["hash"] = util.SHA224String(sha1String)
-	}
-	if email != nil && *email != "" {
-		update["email"] = *email
-	}
-	if len(update) > 0 {
-		buildUpdate, values, err := builder.BuildUpdate("account", where, update)
-		if err != nil {
-			logrus.Errorln(err.Error())
-			return errors.New(constant.SysError)
-		}
-
-		if _, err = db.Exec(buildUpdate, values...); err != nil {
-			logrus.Errorln(err.Error())
-			return errors.New(constant.SysError)
-		}
-	}
-	return nil
-}
-
 func UpdateAccountById(account *model.Account) error {
 	where := map[string]interface{}{"id": *account.Id}
 	update := map[string]interface{}{}
+	var loginHash []byte
 	if account.Pass != nil && *account.Pass != "" {
-		sha1String := util.Sha1String(fmt.Sprintf("%s%s", *account.Username, *account.Pass))
-		update["pass"] = sha1String
-		update["hash"] = util.SHA224String(sha1String)
+		if len(*account.Pass) < 16 || len(*account.Pass) > 72 {
+			return errors.New("新密码须为16至72字节")
+		}
+		var err error
+		loginHash, err = bcrypt.GenerateFromPassword([]byte(*account.Pass), bcrypt.DefaultCost)
+		if err != nil {
+			return err
+		}
+		if err = Security.Ensure(*account.Id); err != nil {
+			return err
+		}
 	}
 	if account.RoleId != nil {
 		update["role_id"] = *account.RoleId
@@ -345,7 +320,7 @@ func UpdateAccountById(account *model.Account) error {
 	if account.ExpireTime != nil {
 		update["expire_time"] = *account.ExpireTime
 	}
-	if account.RoleId != nil {
+	if account.Deleted != nil {
 		update["deleted"] = *account.Deleted
 	}
 	if account.Quota != nil {
@@ -368,10 +343,20 @@ func UpdateAccountById(account *model.Account) error {
 			return errors.New(constant.SysError)
 		}
 
-		if _, err = db.Exec(buildUpdate, values...); err != nil {
-			logrus.Errorln(err.Error())
+		tx, err := db.Begin()
+		if err != nil {
+			return err
+		}
+		defer tx.Rollback()
+		if _, err = tx.Exec(buildUpdate, values...); err != nil {
 			return errors.New(constant.SysError)
 		}
+		if len(loginHash) != 0 {
+			if _, err = tx.Exec("UPDATE account_security SET login_hash=? WHERE account_id=?", string(loginHash), *account.Id); err != nil {
+				return err
+			}
+		}
+		return tx.Commit()
 	}
 	return nil
 }
@@ -550,7 +535,7 @@ func ResetAccountDownloadAndUpload(id *uint, roleIds *[]uint) error {
 func SelectAccountClashSubscribe(pass string) (*model.Account, error) {
 	var account model.Account
 
-	where := map[string]interface{}{"pass": pass}
+	where := map[string]interface{}{"pass": pass, "deleted": 0}
 	selectFields := []string{"id", "username", "pass", "expire_time", "quota", "download", "upload"}
 	buildSelect, values, err := builder.BuildSelect("account", where, selectFields)
 	if err != nil {

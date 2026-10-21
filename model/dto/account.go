@@ -14,19 +14,21 @@ type AccountDto struct {
 }
 
 type AccountUpdatePassDto struct {
-	NewPass *string `json:"newPass" form:"newPass" validate:"required,min=6,max=20,validateStr"`
-	OldPass *string `json:"oldPass" form:"oldPass" validate:"required,min=6,max=20,validateStr"`
+	OTP     string  `json:"otp" validate:"max=32"`
+	NewPass *string `json:"newPass" form:"newPass" validate:"required,min=16,max=72"`
+	OldPass *string `json:"oldPass" form:"oldPass" validate:"required,min=6,max=72"`
 }
 
 type AccountUpdatePropertyDto struct {
+	OTP      string  `json:"otp" validate:"max=32"`
 	Username *string `json:"username" form:"username" validate:"omitempty,min=6,max=20,validateStr"`
 	Email    *string `json:"email" form:"email" validate:"omitempty,validateEmail"`
-	Pass     *string `json:"pass" form:"pass" validate:"required,min=6,max=20,validateStr"`
+	Pass     *string `json:"pass" form:"pass" validate:"required,min=6,max=72"`
 }
 
 type AccountCreateDto struct {
 	Username   *string `json:"username" form:"username" validate:"required,min=6,max=20,validateStr"`
-	Pass       *string `json:"pass" form:"pass" validate:"required,min=6,max=20,validateStr"`
+	Pass       *string `json:"pass" form:"pass" validate:"required,min=16,max=72"`
 	RoleId     *uint   `json:"roleId" form:"roleId" validate:"required,oneof=2 3"`
 	Email      *string `json:"email" form:"email" validate:"omitempty,validateEmail"`
 	ExpireTime *uint   `json:"expireTime" form:"expireTime" validate:"required"`
@@ -41,7 +43,7 @@ type AccountUpdateDto struct {
 	RequiredIdDto
 	Quota      *int    `json:"quota" form:"quota" validate:"required,gte=-1,lte=1024000"`
 	Username   *string `json:"username" form:"username" validate:"required,min=0,max=20,validateStr"`
-	Pass       *string `json:"pass" form:"pass" validate:"omitempty,min=6,max=20,validateStr"`
+	Pass       *string `json:"pass" form:"pass" validate:"omitempty,min=16,max=72"`
 	RoleId     *uint   `json:"roleId" form:"roleId" validate:"required,oneof=1 2 3"`
 	Deleted    *uint   `json:"deleted" form:"deleted" validate:"required,oneof=0 1"`
 	ExpireTime *uint   `json:"expireTime" form:"expireTime" validate:"required,gte=0"`
@@ -52,14 +54,15 @@ type AccountUpdateDto struct {
 }
 
 type AccountLoginDto struct {
+	OTP      string  `json:"otp" validate:"max=32"`
 	Username *string `json:"username" form:"username" validate:"required,min=6,max=20,validateStr"`
-	Pass     *string `json:"pass" form:"pass" validate:"required,min=6,max=20,validateStr"`
+	Pass     *string `json:"pass" form:"pass" validate:"required,min=6,max=72"`
 	CaptureDto
 }
 
 type AccountRegisterDto struct {
 	Username *string `json:"username" form:"username" validate:"required,min=6,max=20,validateStr,excludes=admin"`
-	Pass     *string `json:"pass" form:"pass" validate:"required,min=6,max=20,validateStr"`
+	Pass     *string `json:"pass" form:"pass" validate:"required,min=16,max=72"`
 	CaptureDto
 }
 
