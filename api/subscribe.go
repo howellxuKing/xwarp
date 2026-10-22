@@ -13,6 +13,7 @@ import (
 	"trojan-panel/model/dto"
 	"trojan-panel/model/vo"
 	"trojan-panel/service"
+	"trojan-panel/subscriptionrules"
 )
 
 // ClashSubscribe 获取Clash订阅地址
@@ -63,8 +64,12 @@ func Subscribe(c *gin.Context) {
 		vo.Fail(err.Error(), c)
 		return
 	}
-	result := fmt.Sprintf(`%s
-%s`, string(clashConfigYaml), getClashRules())
+	rules, err := getClashRules()
+	if err != nil {
+		vo.Fail("订阅规则格式错误，请联系管理员检查模板设置", c)
+		return
+	}
+	result := fmt.Sprintf("%s\n%s", string(clashConfigYaml), rules)
 
 	c.Header("content-disposition", fmt.Sprintf("attachment; filename=%s.yaml", *account.Username))
 	c.Header("profile-update-interval", "12")
@@ -76,12 +81,8 @@ func Subscribe(c *gin.Context) {
 }
 
 // getClashRules 返回订阅规则 = 面板配置的自定义直连/代理网站规则（置顶，优先级最高）+ 基础规则
-func getClashRules() string {
-	base := getBaseClashRules()
-	if custom := getCustomClashRules(); custom != "" {
-		return custom + "\n" + base
-	}
-	return base
+func getClashRules() (string, error) {
+	return subscriptionrules.Prepend(getBaseClashRules(), getCustomClashRules())
 }
 
 // getCustomClashRules 面板「模板设置」中自定义的直连/代理网站生成的规则
@@ -91,7 +92,7 @@ func getCustomClashRules() string {
 	if err != nil {
 		return ""
 	}
-	return strings.TrimSpace(string(content))
+	return string(content)
 }
 
 // getBaseClashRules 返回基础订阅规则

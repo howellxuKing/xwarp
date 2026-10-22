@@ -42,7 +42,7 @@ jobs:
       - name: Check security utilities
         env:
           XWARP_TEST_MYSQL_DSN: root:isolated-test-password@tcp(127.0.0.1:3306)/xwarp_security_test
-        run: go test -race ./security
+        run: go test -race ./security ./subscriptionrules
 
       - name: Build backend binary (linux/amd64)
         run: |

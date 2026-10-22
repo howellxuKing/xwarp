@@ -128,6 +128,21 @@ def main():
                 assert success("/api/account/clashSubscribe", token=token3) == rotated
                 # Registration is username-only. Generated credentials are disclosed once, not in account info.
                 system = success("/api/system/selectSystemByName", token=token3)
+                baseline_subscription = request(rotated)[1]
+                # Exercise the exact template-save -> subscription path used by the panel.
+                system.update(clashDirectDomains="https://0996zp.com/", clashProxyDomains="example.org")
+                success("/api/system/updateSystemById", "POST", system, token3)
+                status, subscription_text, _ = request(rotated)
+                assert status == 200 and isinstance(subscription_text, str)
+                lines = subscription_text.splitlines()
+                header = next(i for i, line in enumerate(lines) if line.strip() == "rules:")
+                direct = next(i for i, line in enumerate(lines) if "DOMAIN-SUFFIX,0996zp.com,DIRECT" in line)
+                proxy = next(i for i, line in enumerate(lines) if "DOMAIN-SUFFIX,example.org,PROXY" in line)
+                assert header < proxy < direct, "Custom rules escaped the rules list; subscription is invalid YAML"
+                assert lines[proxy].startswith(" ") and lines[direct].startswith(" ")
+                system.update(clashDirectDomains="", clashProxyDomains="")
+                success("/api/system/updateSystemById", "POST", system, token3)
+                assert request(rotated)[1] == baseline_subscription, "Clearing custom lists did not restore the original subscription"
                 system.update(registerEnable=1, captchaEnable=0, registerQuota=1, registerExpireDays=1)
                 success("/api/system/updateSystemById", "POST", system, token3)
                 rejected("/api/auth/register", "POST", {"username": "manualuser", "pass": "supplied-password-123"})
