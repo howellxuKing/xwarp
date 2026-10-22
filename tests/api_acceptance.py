@@ -156,7 +156,16 @@ def main():
                 assert lines[proxy].startswith(" ") and lines[direct].startswith(" ")
                 system.update(clashDirectDomains="", clashProxyDomains="")
                 success("/api/system/updateSystemById", "POST", system, token3)
-                assert request(rotated)[1] == baseline_subscription, "Clearing custom lists did not restore the original subscription"
+                clear_status, cleared_subscription, _ = request(rotated)
+                if cleared_subscription != baseline_subscription:
+                    if isinstance(cleared_subscription, str) and isinstance(baseline_subscription, str):
+                        before_rules = baseline_subscription[baseline_subscription.find("rules:"):].splitlines()
+                        after_rules = cleared_subscription[cleared_subscription.find("rules:"):].splitlines()
+                        different = [(i, a, b) for i, (a, b) in enumerate(zip(before_rules, after_rules)) if a != b]
+                        print("Rule restoration mismatch:", len(before_rules), len(after_rules), different[:3], flush=True)
+                    else:
+                        print("Rule restoration response:", clear_status, type(cleared_subscription).__name__, flush=True)
+                assert cleared_subscription == baseline_subscription, "Clearing custom lists did not restore the original subscription"
                 system.update(registerEnable=1, captchaEnable=0, registerQuota=1, registerExpireDays=1)
                 success("/api/system/updateSystemById", "POST", system, token3)
                 rejected("/api/auth/register", "POST", {"username": "manualuser", "pass": "supplied-password-123"})
