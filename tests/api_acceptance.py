@@ -15,6 +15,9 @@ import time
 from pathlib import Path
 
 
+_last_request = 0.0
+
+
 def code(secret):
     key = base64.b32decode(secret + "=" * ((8 - len(secret) % 8) % 8))
     digest = hmac.new(key, struct.pack(">Q", int(time.time()) // 30), hashlib.sha1).digest()
@@ -23,6 +26,12 @@ def code(secret):
 
 
 def request(path, method="GET", data=None, token=None, cookie=None):
+    # Exercise actual API outcomes instead of accidentally hitting the global 5/s limiter.
+    global _last_request
+    pause = 0.22 - (time.monotonic() - _last_request)
+    if pause > 0:
+        time.sleep(pause)
+    _last_request = time.monotonic()
     connection = http.client.HTTPConnection("127.0.0.1", 18081, timeout=15)
     headers = {"Content-Type": "application/json"}
     if token:
