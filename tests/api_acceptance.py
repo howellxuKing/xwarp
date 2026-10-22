@@ -91,6 +91,11 @@ def main():
                 assert not state["totpEnabled"]
                 subscription = success("/api/account/clashSubscribe", token=token)
                 assert request(subscription)[0] == 200 and "rules:" in request(subscription)[1]
+                initial_rules = request(subscription)[1]
+                assert "DOMAIN-SUFFIX,douyin.com,DIRECT" in initial_rules, "Bundled domestic domain routing missing"
+                assert "IP-CIDR6,fc00::/7,DIRECT,no-resolve" in initial_rules
+                assert initial_rules.index("DOMAIN-SUFFIX,openai.com,PROXY") < initial_rules.index("DOMAIN-SUFFIX,douyin.com,DIRECT") < initial_rules.index("GEOIP,CN,DIRECT")
+                assert initial_rules.rstrip().endswith("MATCH,PROXY")
                 enrollment = success("/api/security/totp/setup", "POST", {"password": password}, token)
                 recovery = success("/api/security/totp/confirm", "POST", {"password": password, "code": code(enrollment["secret"])}, token)["recoveryCodes"]
                 assert len(recovery) == 8
@@ -128,6 +133,15 @@ def main():
                 assert success("/api/account/clashSubscribe", token=token3) == rotated
                 # Registration is username-only. Generated credentials are disclosed once, not in account info.
                 system = success("/api/system/selectSystemByName", token=token3)
+                # An edited template must not silently acquire automatic rule lists.
+                original_template = system["clashRule"]
+                system["clashRule"] = "# administrator rule-provider configuration; jsdelivr disabled\nrules:\n  - DOMAIN,admin-fixture.example,DIRECT\n  - MATCH,PROXY\n"
+                success("/api/system/updateSystemById", "POST", system, token3)
+                custom_template_subscription = request(rotated)[1]
+                assert "admin-fixture.example,DIRECT" in custom_template_subscription
+                assert "DOMAIN-SUFFIX,douyin.com,DIRECT" not in custom_template_subscription
+                system["clashRule"] = original_template
+                success("/api/system/updateSystemById", "POST", system, token3)
                 baseline_subscription = request(rotated)[1]
                 # Exercise the exact template-save -> subscription path used by the panel.
                 system.update(clashDirectDomains="https://0996zp.com/", clashProxyDomains="example.org")

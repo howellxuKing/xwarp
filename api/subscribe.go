@@ -97,22 +97,22 @@ func getCustomClashRules() string {
 
 // getBaseClashRules 返回基础订阅规则
 // 优先读取面板可编辑的规则模板文件（config/template/template-clash-rule.yaml，系统设置→Clash规则 保存后即写入）；
-// 文件缺失、为空、为旧版默认内容或依赖 jsDelivr 时，回退到当前内置规则。
+// 文件缺失、为空或匹配已知旧版默认内容时，采用当前内置规则。
 // 管理员修改过的模板保持不变。
 func getBaseClashRules() string {
 	content, err := os.ReadFile(constant.ClashRuleFilePath)
 	if err != nil {
-		return constant.ClashRules
+		return service.DefaultClashRules()
 	}
 	rules := strings.TrimSpace(string(content))
 	normalizedRules := strings.ReplaceAll(rules, "\r\n", "\n")
 	rulesDigest := fmt.Sprintf("%x", sha256.Sum256([]byte(normalizedRules)))
 	if rules == "" ||
-		strings.Contains(rules, "rule-provider") ||
-		strings.Contains(rules, "jsdelivr") ||
 		rulesDigest == constant.ClashRulesV233SHA256 ||
+		rulesDigest == constant.ClashRulesPreviousSHA256 ||
+		normalizedRules == strings.TrimSpace(constant.ClashRules) ||
 		rules == "rules:\n  - GEOIP,CN,DIRECT\n  - MATCH,PROXY" {
-		return constant.ClashRules
+		return service.DefaultClashRules()
 	}
 	return rules
 }

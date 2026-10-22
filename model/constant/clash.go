@@ -4,6 +4,9 @@ package constant
 // It lets upgrades adopt the new defaults without overwriting administrator-customized rules.
 const ClashRulesV233SHA256 = "d6d8f54a5cd95bd0a1c3e9beead79506b3460da489d535ff92bb903cb2959718"
 
+// Unedited pre-domestic-list defaults may upgrade without replacing custom templates.
+const ClashRulesPreviousSHA256 = "de6de67fc342191241e375f96b56cf81659a80f59237b624873be7326783e9d4"
+
 // ClashRules 订阅返回的 Clash 规则（自包含、无外部 rule-provider 依赖，Clash Verge 可直接导入）
 const ClashRules = `rules:
   # 1. 管理员自定义覆盖规则可放在这里（规则从上到下匹配）
@@ -15,6 +18,11 @@ const ClashRules = `rules:
   - IP-CIDR,10.0.0.0/8,DIRECT,no-resolve
   - IP-CIDR,172.16.0.0/12,DIRECT,no-resolve
   - IP-CIDR,192.168.0.0/16,DIRECT,no-resolve
+  - IP-CIDR6,::1/128,DIRECT,no-resolve
+  - IP-CIDR6,fc00::/7,DIRECT,no-resolve
+  - IP-CIDR6,fe80::/10,DIRECT,no-resolve
+  - DOMAIN,localhost,DIRECT
+  - DOMAIN-SUFFIX,local,DIRECT
   # 3. 常用国内公共 DNS / API 直连
   - IP-CIDR,223.5.5.5/32,DIRECT,no-resolve
   - IP-CIDR,119.29.29.29/32,DIRECT,no-resolve
@@ -72,7 +80,6 @@ const ClashRules = `rules:
   - DOMAIN-SUFFIX,steamserver.net,DIRECT
   - DOMAIN-SUFFIX,cm.steampowered.com,DIRECT
   - DOMAIN-SUFFIX,epgames.com,DIRECT
-  - DOMAIN-SUFFIX,0996zp.com,DIRECT
   # 6. 其他中国大陆 IP 直连
   - GEOIP,CN,DIRECT
   # 7. 兜底：无法识别的流量走代理

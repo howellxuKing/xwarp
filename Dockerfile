@@ -15,6 +15,7 @@ ARG TARGETOS
 ARG TARGETARCH
 ARG TARGETVARIANT
 COPY build/trojan-panel-${TARGETOS}-${TARGETARCH}${TARGETVARIANT} trojan-panel
+COPY domesticrules/data/LICENSE domesticrules/data/NOTICE.md /usr/share/doc/xwarp-domestic-rules/
 # Set apk China mirror
 # RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories
 RUN apk add bash tzdata ca-certificates && \
