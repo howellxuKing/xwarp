@@ -10,20 +10,34 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+
+	"gopkg.in/yaml.v3"
+	"trojan-panel/model/constant"
 )
+
+const testTemplate = "rules:\n  - DOMAIN-SUFFIX,openai.com,PROXY\n  # @XWARP-DOMESTIC@\n  - GEOIP,cn,DIRECT,no-resolve\n  - MATCH,PROXY\n"
+
+func mustApply(t *testing.T, store *Store, base string) string {
+	t.Helper()
+	applied, err := store.Apply(base, false)
+	if err != nil {
+		t.Fatalf("apply domestic rules: %v", err)
+	}
+	return applied
+}
 
 func TestOfflineDefaultAndUpdateRecovery(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "domestic.json")
 	store := Open(path)
-	base := "rules:\n  - DOMAIN-SUFFIX,openai.com,PROXY\n  - GEOIP,CN,DIRECT\n  - MATCH,PROXY\n"
-	before := store.Apply(base)
+	base := testTemplate
+	before := mustApply(t, store, base)
 	if strings.Contains(before, "DOMAIN-SUFFIX,baidu,DIRECT") || strings.Contains(before, "DOMAIN-SUFFIX,com,DIRECT") {
 		t.Fatal("an entire top-level domain became direct")
 	}
 	if !strings.Contains(before, "DOMAIN-SUFFIX,douyin.com,DIRECT") || !strings.HasSuffix(before, "MATCH,PROXY\n") {
 		t.Fatal("offline bundled routing unavailable")
 	}
-	if strings.Index(before, "openai.com,PROXY") > strings.Index(before, "douyin.com,DIRECT") || strings.Index(before, "douyin.com,DIRECT") > strings.Index(before, "GEOIP,CN") {
+	if strings.Index(before, "openai.com,PROXY") > strings.Index(before, "douyin.com,DIRECT") || strings.Index(before, "douyin.com,DIRECT") > strings.Index(before, "GEOIP,cn") {
 		t.Fatal("domestic rules bypassed explicit overseas policy or IP fallback")
 	}
 	var body atomic.Value
@@ -33,11 +47,11 @@ func TestOfflineDefaultAndUpdateRecovery(t *testing.T) {
 	if err := store.Refresh(context.Background(), server.Client(), server.URL); err != nil {
 		t.Fatal(err)
 	}
-	after := store.Apply(base)
+	after := mustApply(t, store, base)
 	if !strings.Contains(after, "DOMAIN-SUFFIX,new-fixture.example,DIRECT") || store.Version() == Open("").Version() {
 		t.Fatal("accepted update did not become active")
 	}
-	if Open(path).Apply(base) != after {
+	if mustApply(t, Open(path), base) != after {
 		t.Fatal("restart did not recover persisted snapshot")
 	}
 	for _, invalid := range []string{"<html>upstream error</html>", "+.com\n", bundled + "\n+.bad.example,PROXY\n", strings.Repeat("x", maxBytes+1)} {
@@ -45,15 +59,94 @@ func TestOfflineDefaultAndUpdateRecovery(t *testing.T) {
 		if store.Refresh(context.Background(), server.Client(), server.URL) == nil {
 			t.Fatal("invalid upstream update accepted")
 		}
-		if store.Apply(base) != after || Open(path).Apply(base) != after {
+		if mustApply(t, store, base) != after || mustApply(t, Open(path), base) != after {
 			t.Fatal("failed refresh replaced last good rules")
 		}
 	}
 	if err := os.WriteFile(path, []byte("broken cache"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	if Open(path).Apply(base) != before {
+	if mustApply(t, Open(path), base) != before {
 		t.Fatal("corrupt cache prevented bundled fallback")
+	}
+}
+
+func TestApplyRequiresStandalonePlaceholder(t *testing.T) {
+	store := Open(filepath.Join(t.TempDir(), "domestic.json"))
+	for _, template := range []string{
+		"rules:\n  - MATCH,PROXY\n",
+		"rules:\n  - DOMAIN-SUFFIX,openai.com,PROXY # @XWARP-DOMESTIC@\n  - MATCH,PROXY\n",
+		"rules:\n  # @XWARP-DOMESTIC@ trailing\n  - MATCH,PROXY\n",
+	} {
+		if _, err := store.Apply(template, false); err == nil {
+			t.Fatalf("template without a standalone placeholder was accepted: %q", template)
+		}
+	}
+}
+
+func TestApplyGeoSite(t *testing.T) {
+	store := Open(filepath.Join(t.TempDir(), "domestic.json"))
+	applied, err := store.Apply(testTemplate, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(applied, "GEOSITE,geolocation-cn,DIRECT") || strings.Contains(applied, "DOMAIN-SUFFIX,douyin.com,DIRECT") {
+		t.Fatal("geoSite mode did not replace the expanded block")
+	}
+	if strings.Index(applied, "GEOSITE,geolocation-cn") > strings.Index(applied, "GEOIP,cn") {
+		t.Fatal("geoSite rule must precede the GEOIP fallback")
+	}
+}
+
+func TestBundledTemplateKeepsRoutingOrder(t *testing.T) {
+	store := Open(filepath.Join(t.TempDir(), "domestic.json"))
+	for _, geoSite := range []bool{false, true} {
+		applied, err := store.Apply(constant.ClashRules, geoSite)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(applied, constant.ClashDomesticMarker) {
+			t.Fatal("placeholder was not expanded")
+		}
+		var document map[string][]string
+		if err := yaml.Unmarshal([]byte(applied), &document); err != nil {
+			t.Fatalf("expanded template is not valid YAML: %v", err)
+		}
+		rules := document["rules"]
+		if !geoSite && len(rules) < 5000 {
+			t.Fatalf("unexpected rule count: %d", len(rules))
+		}
+		if geoSite && len(rules) > 100 {
+			t.Fatalf("geoSite mode should not expand the domain block, got %d rules", len(rules))
+		}
+		if rules[len(rules)-1] != "MATCH,PROXY" {
+			t.Fatalf("MATCH,PROXY must stay last, got %q", rules[len(rules)-1])
+		}
+		indexOf := func(prefix string) int {
+			for index, rule := range rules {
+				if strings.HasPrefix(rule, prefix) {
+					return index
+				}
+			}
+			return -1
+		}
+		// 国外代理规则必须在大陆直连之前，这正是 v2.3.x 把 YouTube 判成直连的原因
+		overseas := indexOf("DOMAIN-SUFFIX,google.com,PROXY")
+		fallback := indexOf("GEOIP,cn,DIRECT,no-resolve")
+		if overseas < 0 || fallback < 0 || overseas > fallback {
+			t.Fatalf("overseas rules must precede the GEOIP fallback: overseas=%d fallback=%d", overseas, fallback)
+		}
+		if geoSite {
+			geoSiteIndex := indexOf("GEOSITE,geolocation-cn,DIRECT")
+			if geoSiteIndex < 0 || geoSiteIndex > fallback {
+				t.Fatalf("geoSite block must precede the GEOIP fallback: geoSite=%d fallback=%d", geoSiteIndex, fallback)
+			}
+			continue
+		}
+		domestic := indexOf("DOMAIN-SUFFIX,douyin.com,DIRECT")
+		if domestic < 0 || !(overseas < domestic && domestic < fallback) {
+			t.Fatalf("routing order is wrong: overseas=%d domestic=%d fallback=%d", overseas, domestic, fallback)
+		}
 	}
 }
 
@@ -78,7 +171,7 @@ func TestFailedPersistenceAndConcurrentRead(t *testing.T) {
 		go func() {
 			defer readers.Done()
 			for j := 0; j < 100; j++ {
-				if !strings.HasSuffix(store.Apply("rules:\n  - GEOIP,CN,DIRECT\n  - MATCH,PROXY\n"), "MATCH,PROXY\n") {
+				if !strings.HasSuffix(mustApply(t, store, testTemplate), "MATCH,PROXY\n") {
 					t.Error("concurrent read returned incomplete subscription")
 				}
 			}

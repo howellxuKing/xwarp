@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/sirupsen/logrus"
 	"trojan-panel/dao"
 	"trojan-panel/model/constant"
 	"trojan-panel/model/dto"
@@ -98,7 +99,7 @@ func getCustomClashRules() string {
 // getBaseClashRules 返回基础订阅规则
 // 优先读取面板可编辑的规则模板文件（config/template/template-clash-rule.yaml，系统设置→Clash规则 保存后即写入）；
 // 文件缺失、为空或匹配已知旧版默认内容时，采用当前内置规则。
-// 管理员修改过的模板保持不变。
+// 管理员修改过的模板会保留，但同样会展开大陆域名占位行。
 func getBaseClashRules() string {
 	content, err := os.ReadFile(constant.ClashRuleFilePath)
 	if err != nil {
@@ -107,12 +108,24 @@ func getBaseClashRules() string {
 	rules := strings.TrimSpace(string(content))
 	normalizedRules := strings.ReplaceAll(rules, "\r\n", "\n")
 	rulesDigest := fmt.Sprintf("%x", sha256.Sum256([]byte(normalizedRules)))
-	if rules == "" ||
-		rulesDigest == constant.ClashRulesV233SHA256 ||
-		rulesDigest == constant.ClashRulesPreviousSHA256 ||
-		normalizedRules == strings.TrimSpace(constant.ClashRules) ||
-		rules == "rules:\n  - GEOIP,CN,DIRECT\n  - MATCH,PROXY" {
+	if rules == "" || isBuiltinClashRules(rulesDigest, normalizedRules) {
 		return service.DefaultClashRules()
 	}
-	return rules
+	// 自定义模板也要展开大陆域名块，否则国内网站会退化为按 IP 判定
+	applied, applyErr := service.ApplyDomesticRules(rules)
+	if applyErr != nil {
+		logrus.Warnf("自定义 Clash 规则模板缺少占位行 %s，本次订阅不含大陆域名直连: %v", constant.ClashDomesticMarker, applyErr)
+		return rules
+	}
+	return applied
+}
+
+// isBuiltinClashRules 判断模板是否为历史版本的内置默认内容（可安全替换为当前默认）。
+func isBuiltinClashRules(digest, normalized string) bool {
+	switch digest {
+	case constant.ClashRulesV233SHA256, constant.ClashRulesPreviousSHA256, constant.ClashRulesV250SHA256:
+		return true
+	}
+	return normalized == strings.TrimSpace(constant.ClashRules) ||
+		normalized == "rules:\n  - GEOIP,CN,DIRECT\n  - MATCH,PROXY"
 }

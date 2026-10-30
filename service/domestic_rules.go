@@ -23,9 +23,20 @@ func getDomesticStore() *domesticrules.Store {
 	return domesticStore
 }
 
+// ApplyDomesticRules expands the mainland block in any rule template.
+// XWARP_CLASH_GEOSITE=1 swaps the ~5400 expanded domains for a single GEOSITE rule (Mihomo only).
+func ApplyDomesticRules(base string) (string, error) {
+	return getDomesticStore().Apply(base, os.Getenv("XWARP_CLASH_GEOSITE") == "1")
+}
+
 // DefaultClashRules is local-only, including when upstream is unavailable.
 func DefaultClashRules() string {
-	return getDomesticStore().Apply(constant.ClashRules)
+	rules, err := ApplyDomesticRules(constant.ClashRules)
+	if err != nil {
+		logrus.Errorf("Clash 默认规则模板不可用，本次订阅不含大陆域名直连: %v", err)
+		return constant.ClashRules
+	}
+	return rules
 }
 
 func CronRefreshDomesticRules() {

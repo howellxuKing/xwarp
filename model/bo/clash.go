@@ -132,12 +132,16 @@ type WsOptsHeaders struct {
 }
 
 type ProxyGroup struct {
-	Name    string   `yaml:"name"`
-	Type    string   `yaml:"type"`
-	Proxies []string `yaml:"proxies"`
+	Name      string   `yaml:"name"`
+	Type      string   `yaml:"type"`
+	Proxies   []string `yaml:"proxies"`
+	Url       string   `yaml:"url,omitempty"`
+	Interval  int      `yaml:"interval,omitempty"`
+	Tolerance int      `yaml:"tolerance,omitempty"`
 }
 
 type ClashConfig struct {
+	Mode        string        `yaml:"mode,omitempty"`
 	Proxies     []interface{} `yaml:"proxies"`
 	ProxyGroups []ProxyGroup  `yaml:"proxy-groups"`
 }

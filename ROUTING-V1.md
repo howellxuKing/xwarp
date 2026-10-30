@@ -13,3 +13,17 @@ Verification seams: complete HTTP subscription fixture (country/domain ordering,
 Third-party source: https://github.com/MetaCubeX/meta-rules-dat ; bundled data commit 5b62abd872efea28a44ee1ec0dc3869cff27c739, geo/geosite/geolocation-cn.list; GPL-3.0 text and attribution accompany data. Output plain DOMAIN/DOMAIN-SUFFIX entries, not MRS.
 
 Single-label suffixes (including upstream brand TLD entries) are deliberately omitted, rather than making a whole top-level domain direct. The source snapshot itself is retained unchanged apart from a final newline.
+
+## Routing v2（当前默认模板）
+
+模型从「国外域名白名单 + GEOIP 抢域名」改为「默认代理、只放行大陆与内网」：
+
+本地/内网直连 → 少量强制代理例外 → 国外下载类例外直连 → 大陆域名直连 → 大陆 IP 直连（仅 IP 流量）→ 其余代理。
+
+- 域名维度优先：大陆域名由模板里的占位行 `# @XWARP-DOMESTIC@` 展开，位置固定在 `GEOIP,cn,DIRECT,no-resolve` 之前，不再依赖字符串匹配 `GEOIP,CN,DIRECT` 的缩进；
+- 管理员自定义模板同样会展开该占位行；缺少占位行时保存会被拒绝，订阅侧记录告警并退回原模板（不再静默丢规则）；
+- `XWARP_CLASH_GEOSITE=1` 时展开为单条 `GEOSITE,geolocation-cn,DIRECT`（仅适用 Mihomo / Clash Verge Rev，可省掉约 200KB 内联域名）；
+- 订阅额外输出 `mode: rule`，代理组改为 `PROXY(select) / AUTO(url-test) / FALLBACK`；
+- v2.3.3、v2.3.4、v2.5.0 的未修改默认模板按摘要识别后自动升级到新默认；管理员修改过的模板保持不变。
+
+显式例外只保留两类：必须走代理的国外服务（google/youtube/github/openai/telegram 等），以及希望直连的国外下载与更新域名（steam/windowsupdate 等）。

@@ -16,6 +16,7 @@ import (
 	"trojan-panel/model/constant"
 	"trojan-panel/model/dto"
 	"trojan-panel/model/vo"
+	"trojan-panel/subscriptionrules"
 )
 
 func SelectSystemByName(name *string) (vo.SystemVo, error) {
@@ -174,9 +175,22 @@ func UpdateSystemById(systemDto dto.SystemUpdateDto) error {
 		logrus.Errorln(fmt.Sprintf("UpdateSystemById write clash custom rule file err: %v", err))
 	}
 	if systemDto.ClashRule != nil {
+		// 空内容表示恢复内置默认模板
+		clashRule := *systemDto.ClashRule
+		if strings.TrimSpace(clashRule) == "" {
+			clashRule = constant.ClashRules
+		}
+		// 模板必须保留占位行，否则保存后大陆域名不再自动直连
+		if !strings.Contains(clashRule, constant.ClashDomesticMarker) {
+			return fmt.Errorf("Clash 规则模板缺少占位行 %s：请保留该行，否则保存后大陆域名将不再自动直连", constant.ClashDomesticMarker)
+		}
+		if err := subscriptionrules.Validate(clashRule); err != nil {
+			return fmt.Errorf("Clash 规则模板不合法: %w", err)
+		}
 		// 修改Clash规则默认模板文件
-		if err := os.WriteFile(constant.ClashRuleFilePath, []byte(*systemDto.ClashRule), 0666); err != nil {
-			logrus.Errorln(fmt.Sprintf("write Clash rule default template file err: %v", err))
+		if err := os.WriteFile(constant.ClashRuleFilePath, []byte(clashRule), 0600); err != nil {
+			logrus.Errorf("write Clash rule default template file err: %v", err)
+			return fmt.Errorf("写入 Clash 规则模板失败: %w", err)
 		}
 	}
 	if systemDto.XrayTemplate != nil {

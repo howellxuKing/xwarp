@@ -15,6 +15,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"trojan-panel/model/constant"
 )
 
 //go:embed data/domestic.list
@@ -57,12 +59,32 @@ func Open(path string) *Store {
 	return s
 }
 
-// Apply inserts domains after explicit service rules and before the China-IP fallback.
-func (s *Store) Apply(base string) string {
+// Apply expands the mainland placeholder line in the rule template.
+// geoSite replaces the expanded block with one GEOSITE rule for Mihomo clients.
+// A template without the placeholder is rejected instead of silently losing mainland routing.
+func (s *Store) Apply(base string, geoSite bool) (string, error) {
 	s.mu.RLock()
 	rules := s.rules
 	s.mu.RUnlock()
-	return strings.Replace(base, "  - GEOIP,CN,DIRECT", rules+"  - GEOIP,CN,DIRECT", 1)
+	if geoSite {
+		rules = "  - GEOSITE,geolocation-cn,DIRECT\n"
+	}
+	marker := constant.ClashDomesticMarker
+	index := strings.Index(base, marker)
+	if index < 0 {
+		return "", fmt.Errorf("clash rule template is missing the %s placeholder", marker)
+	}
+	lineStart := strings.LastIndex(base[:index], "\n") + 1
+	lineEnd := len(base)
+	if offset := strings.Index(base[index:], "\n"); offset >= 0 {
+		lineEnd = index + offset + 1
+	}
+	// Only indentation and the leading comment marker may surround the placeholder.
+	if strings.Trim(strings.TrimSpace(base[lineStart:index]), "#") != "" ||
+		strings.TrimSpace(base[index+len(marker):lineEnd]) != "" {
+		return "", fmt.Errorf("clash placeholder %s must stand on its own line", marker)
+	}
+	return base[:lineStart] + rules + base[lineEnd:], nil
 }
 
 func (s *Store) Version() string {

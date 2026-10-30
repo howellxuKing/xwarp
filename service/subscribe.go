@@ -37,7 +37,7 @@ func SubscribeClash(pass string) (*model.Account, string, []byte, vo.SystemVo, e
 		*account.Quota,
 		*account.ExpireTime/1000)
 
-	clashConfig := bo.ClashConfig{}
+	clashConfig := bo.ClashConfig{Mode: "rule"}
 	var ClashConfigInterface []interface{}
 	var proxies []string
 	for _, item := range nodes {
@@ -254,13 +254,18 @@ func SubscribeClash(pass string) (*model.Account, string, []byte, vo.SystemVo, e
 			proxies = append(proxies, *item.Name)
 		}
 	}
-	proxyGroups := make([]bo.ProxyGroup, 0)
-	proxyGroup := bo.ProxyGroup{
-		Name:    "PROXY",
-		Type:    "select",
-		Proxies: proxies,
+	proxyGroups := make([]bo.ProxyGroup, 0, 3)
+	if len(proxies) == 0 {
+		// 没有节点时仍生成可加载的配置，避免客户端整份订阅报错
+		proxyGroups = append(proxyGroups, bo.ProxyGroup{Name: "PROXY", Type: "select", Proxies: []string{"DIRECT"}})
+	} else {
+		proxyGroups = append(proxyGroups,
+			// 默认选自动测速，用户不需要手动挑节点
+			bo.ProxyGroup{Name: "PROXY", Type: "select", Proxies: append([]string{"AUTO", "FALLBACK", "DIRECT"}, proxies...)},
+			bo.ProxyGroup{Name: "AUTO", Type: "url-test", Proxies: proxies, Url: "https://www.gstatic.com/generate_204", Interval: 300, Tolerance: 50},
+			bo.ProxyGroup{Name: "FALLBACK", Type: "fallback", Proxies: proxies, Url: "https://www.gstatic.com/generate_204", Interval: 300},
+		)
 	}
-	proxyGroups = append(proxyGroups, proxyGroup)
 	clashConfig.ProxyGroups = proxyGroups
 	clashConfig.Proxies = ClashConfigInterface
 
