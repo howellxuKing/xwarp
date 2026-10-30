@@ -170,13 +170,11 @@ func UpdateSystemById(systemDto dto.SystemUpdateDto) error {
 	if systemDto.ClashProxyDomains != nil {
 		systemTemplateConfigBo.ClashProxyDomains = *systemDto.ClashProxyDomains
 	}
-	// 根据自定义名单重新生成订阅规则文件（插入在内置规则之前）
-	if err = writeClashCustomRuleFile(systemTemplateConfigBo.ClashProxyDomains, systemTemplateConfigBo.ClashDirectDomains); err != nil {
-		logrus.Errorln(fmt.Sprintf("UpdateSystemById write clash custom rule file err: %v", err))
-	}
+	// 先校验 Clash 规则模板，校验失败时不产生任何副作用
+	var clashRule string
 	if systemDto.ClashRule != nil {
+		clashRule = *systemDto.ClashRule
 		// 空内容表示恢复内置默认模板
-		clashRule := *systemDto.ClashRule
 		if strings.TrimSpace(clashRule) == "" {
 			clashRule = constant.ClashRules
 		}
@@ -187,6 +185,12 @@ func UpdateSystemById(systemDto dto.SystemUpdateDto) error {
 		if err := subscriptionrules.Validate(clashRule); err != nil {
 			return fmt.Errorf("Clash 规则模板不合法: %w", err)
 		}
+	}
+	// 根据自定义名单重新生成订阅规则文件（插入在内置规则之前）
+	if err = writeClashCustomRuleFile(systemTemplateConfigBo.ClashProxyDomains, systemTemplateConfigBo.ClashDirectDomains); err != nil {
+		logrus.Errorln(fmt.Sprintf("UpdateSystemById write clash custom rule file err: %v", err))
+	}
+	if systemDto.ClashRule != nil {
 		// 修改Clash规则默认模板文件
 		if err := os.WriteFile(constant.ClashRuleFilePath, []byte(clashRule), 0600); err != nil {
 			logrus.Errorf("write Clash rule default template file err: %v", err)
