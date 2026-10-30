@@ -15,7 +15,7 @@ import (
 	"trojan-panel/model/constant"
 )
 
-const testTemplate = "rules:\n  - DOMAIN-SUFFIX,openai.com,PROXY\n  # @XWARP-DOMESTIC@\n  - GEOIP,cn,DIRECT,no-resolve\n  - MATCH,PROXY\n"
+const testTemplate = "rules:\n  - DOMAIN-SUFFIX,openai.com,PROXY\n  # @XWARP-DOMESTIC@\n  - GEOIP,cn,DIRECT\n  - MATCH,PROXY\n"
 
 func mustApply(t *testing.T, store *Store, base string) string {
 	t.Helper()
@@ -132,7 +132,7 @@ func TestBundledTemplateKeepsRoutingOrder(t *testing.T) {
 		}
 		// 国外代理规则必须在大陆直连之前，这正是 v2.3.x 把 YouTube 判成直连的原因
 		overseas := indexOf("DOMAIN-SUFFIX,google.com,PROXY")
-		fallback := indexOf("GEOIP,cn,DIRECT,no-resolve")
+		fallback := indexOf("GEOIP,cn,DIRECT")
 		if overseas < 0 || fallback < 0 || overseas > fallback {
 			t.Fatalf("overseas rules must precede the GEOIP fallback: overseas=%d fallback=%d", overseas, fallback)
 		}
@@ -147,6 +147,35 @@ func TestBundledTemplateKeepsRoutingOrder(t *testing.T) {
 		if domestic < 0 || !(overseas < domestic && domestic < fallback) {
 			t.Fatalf("routing order is wrong: overseas=%d domestic=%d fallback=%d", overseas, domestic, fallback)
 		}
+	}
+}
+
+func TestDomesticGeoIPMustResolveDomains(t *testing.T) {
+	store := Open(filepath.Join(t.TempDir(), "domestic.json"))
+	applied, err := store.Apply(constant.ClashRules, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var document map[string][]string
+	if err := yaml.Unmarshal([]byte(applied), &document); err != nil {
+		t.Fatalf("expanded template is not valid YAML: %v", err)
+	}
+	var hasDomesticGeoIP bool
+	for _, rule := range document["rules"] {
+		// no-resolve 会让域名连接跳过这条规则，未列入白名单的大陆站点就会绕道国外。
+		if rule == "GEOIP,cn,DIRECT,no-resolve" {
+			t.Fatal("GEOIP,cn must not carry no-resolve")
+		}
+		if rule == "GEOIP,cn,DIRECT" {
+			hasDomesticGeoIP = true
+		}
+		// mihomo 只对 "lan" 做特殊处理，GEOIP,private 在 geodata 模式下会导致整份配置加载失败。
+		if strings.HasPrefix(rule, "GEOIP,private,") {
+			t.Fatalf("unsupported GEOIP country in rule: %q", rule)
+		}
+	}
+	if !hasDomesticGeoIP {
+		t.Fatal("missing GEOIP,cn,DIRECT fallback")
 	}
 }
 

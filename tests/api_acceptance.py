@@ -103,7 +103,9 @@ def main():
                 initial_rules = request(subscription)[1]
                 assert "DOMAIN-SUFFIX,douyin.com,DIRECT" in initial_rules, "Bundled domestic domain routing missing"
                 assert "IP-CIDR6,fc00::/7,DIRECT,no-resolve" in initial_rules
-                assert initial_rules.index("DOMAIN-SUFFIX,openai.com,PROXY") < initial_rules.index("DOMAIN-SUFFIX,douyin.com,DIRECT") < initial_rules.index("GEOIP,cn,DIRECT,no-resolve")
+                assert initial_rules.index("DOMAIN-SUFFIX,openai.com,PROXY") < initial_rules.index("DOMAIN-SUFFIX,douyin.com,DIRECT") < initial_rules.index("GEOIP,cn,DIRECT")
+                assert "GEOIP,cn,DIRECT,no-resolve" not in initial_rules, "GEOIP,cn must resolve domains or mainland sites fall through to PROXY"
+                assert "GEOIP,private," not in initial_rules, "mihomo only special-cases GEOIP,lan"
                 assert initial_rules.rstrip().endswith("MATCH,PROXY")
                 enrollment = success("/api/security/totp/setup", "POST", {"password": password}, token)
                 recovery = success("/api/security/totp/confirm", "POST", {"password": password, "code": code(enrollment["secret"])}, token)["recoveryCodes"]
@@ -144,7 +146,7 @@ def main():
                 system = success("/api/system/selectSystemByName", token=token3)
                 # 编辑过的模板仍生效，并保留占位行时继续展开大陆域名块
                 original_template = system["clashRule"]
-                system["clashRule"] = "rules:\n  - DOMAIN,admin-fixture.example,DIRECT\n  # @XWARP-DOMESTIC@\n  - GEOIP,cn,DIRECT,no-resolve\n  - MATCH,PROXY\n"
+                system["clashRule"] = "rules:\n  - DOMAIN,admin-fixture.example,DIRECT\n  # @XWARP-DOMESTIC@\n  - GEOIP,cn,DIRECT\n  - MATCH,PROXY\n"
                 success("/api/system/updateSystemById", "POST", system, token3)
                 custom_template_subscription = request(rotated)[1]
                 assert "admin-fixture.example,DIRECT" in custom_template_subscription

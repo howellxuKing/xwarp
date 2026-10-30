@@ -11,6 +11,12 @@ const ClashRulesPreviousSHA256 = "de6de67fc342191241e375f96b56cf81659a80f59237b6
 // GEOIP,CN,DIRECT before the explicit overseas rules and therefore sent some overseas traffic direct.
 const ClashRulesV250SHA256 = "21a3f7773ada01af31bb4a407a857082673150ef93d119afc06b90a42dfffbcf"
 
+// ClashRulesV251SHA256 identifies the unmodified v2.5.1 default template. It carried two defects:
+// GEOIP,private never matches in mihomo (only "lan" is special-cased), and GEOIP,cn,DIRECT,no-resolve
+// can never match a domain connection, so every mainland domain outside the inline list fell through
+// to MATCH,PROXY and went overseas.
+const ClashRulesV251SHA256 = "e64bccb73877f51a5f926fb92554c94f3bd7b2a3a632292e430e6f5e2141c98b"
+
 // ClashDomesticMarker is the placeholder line that the backend expands into the mainland domain
 // block at subscription time. Administrator templates must keep this line; without it the
 // mainland domains silently stop being routed direct.
@@ -19,11 +25,11 @@ const ClashDomesticMarker = "@XWARP-DOMESTIC@"
 // ClashRules 订阅返回的 Clash 规则（自包含、无外部 rule-provider 依赖，Clash Verge 可直接导入）
 //
 // 分流模型：本地/内网直连 → 少量强制代理例外 → 国外下载类例外直连 → 中国大陆域名直连
-// → 中国大陆 IP 直连（仅 IP 直连流量）→ 其余全部代理。
+// → 中国大陆 IP 直连（含域名解析结果）→ 其余全部代理。
 // 域名维度优先于 IP 维度，避免“国外服务解析到国内 IP 就被直连”这类误判。
 const ClashRules = `rules:
   # 1. 本地网络、私人网段与常用国内 DNS 直连
-  - GEOIP,private,DIRECT,no-resolve
+  - GEOIP,lan,DIRECT,no-resolve
   - IP-CIDR,127.0.0.0/8,DIRECT,no-resolve
   - IP-CIDR,10.0.0.0/8,DIRECT,no-resolve
   - IP-CIDR,172.16.0.0/12,DIRECT,no-resolve
@@ -70,8 +76,10 @@ const ClashRules = `rules:
   - DOMAIN-SUFFIX,epgames.com,DIRECT
 
   # 4. 中国大陆域名直连（下一行是占位符，订阅时展开为 geolocation-cn 域名块）
+  # 注意：这一条不能加 no-resolve。加了之后域名连接不会做解析，GEOIP 永远匹配不到，
+  # 未列入上表的大陆网站就会落到 MATCH,PROXY 绕道国外。
   # @XWARP-DOMESTIC@
-  - GEOIP,cn,DIRECT,no-resolve
+  - GEOIP,cn,DIRECT
 
   # 5. 兜底：其余全部走代理
   - MATCH,PROXY
