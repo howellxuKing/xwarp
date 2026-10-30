@@ -15,12 +15,49 @@ const ClashRulesV250SHA256 = "21a3f7773ada01af31bb4a407a857082673150ef93d119afc0
 // GEOIP,private never matches in mihomo (only "lan" is special-cased), and GEOIP,cn,DIRECT,no-resolve
 // can never match a domain connection, so every mainland domain outside the inline list fell through
 // to MATCH,PROXY and went overseas.
-const ClashRulesV251SHA256 = "e64bccb73877f51a5f926fb92554c94f3bd7b2a3a632292e430e6f5e2141c98b"
+// The digest is computed over the canonical form (CRLF normalized to LF, surrounding whitespace
+// trimmed). v2.5.2 shipped it as a CRLF digest, which never matched, so installs that had saved the
+// unmodified v2.5.1 template kept the broken rules after upgrading.
+const ClashRulesV251SHA256 = "e6865ea8911b6b0465c3f21167912e5155f8bd3c85e886ac5fad048f4122112d"
+
+// ClashRulesV252SHA256 identifies the unmodified v2.5.2 default template.
+const ClashRulesV252SHA256 = "c4fbbad7b4038d9e4eacb8727f3dbd09b57cbf9d0d5ebd58ae263632d9a8ce70"
 
 // ClashDomesticMarker is the placeholder line that the backend expands into the mainland domain
 // block at subscription time. Administrator templates must keep this line; without it the
 // mainland domains silently stop being routed direct.
 const ClashDomesticMarker = "@XWARP-DOMESTIC@"
+
+// ClashCriticalProxyRules are prepended ahead of every subscription, including templates and
+// custom domains that administrators imported from third-party rule projects.
+//
+// The first matching rule wins, so a template that starts with GEOIP,cn or ends with MATCH,DIRECT
+// used to send YouTube, Google and GitHub direct, where they simply do not work from mainland
+// China. These services are the reason the panel exists, so no template may override them.
+const ClashCriticalProxyRules = `  - DOMAIN-SUFFIX,openai.com,PROXY
+  - DOMAIN-SUFFIX,chatgpt.com,PROXY
+  - DOMAIN-SUFFIX,oaistatic.com,PROXY
+  - DOMAIN-SUFFIX,oaiusercontent.com,PROXY
+  - DOMAIN-SUFFIX,anthropic.com,PROXY
+  - DOMAIN-SUFFIX,claude.ai,PROXY
+  - DOMAIN-SUFFIX,google.com,PROXY
+  - DOMAIN-SUFFIX,googleapis.com,PROXY
+  - DOMAIN-SUFFIX,gstatic.com,PROXY
+  - DOMAIN-SUFFIX,googlevideo.com,PROXY
+  - DOMAIN-SUFFIX,ggpht.com,PROXY
+  - DOMAIN-SUFFIX,youtube.com,PROXY
+  - DOMAIN-SUFFIX,youtu.be,PROXY
+  - DOMAIN-SUFFIX,ytimg.com,PROXY
+  - DOMAIN-SUFFIX,youtube-nocookie.com,PROXY
+  - DOMAIN-SUFFIX,github.com,PROXY
+  - DOMAIN-SUFFIX,githubassets.com,PROXY
+  - DOMAIN-SUFFIX,githubusercontent.com,PROXY
+  - DOMAIN-SUFFIX,telegram.org,PROXY
+  - DOMAIN-SUFFIX,t.me,PROXY
+  - DOMAIN-SUFFIX,twitter.com,PROXY
+  - DOMAIN-SUFFIX,twimg.com,PROXY
+  - DOMAIN-SUFFIX,x.com,PROXY
+`
 
 // ClashRules 订阅返回的 Clash 规则（自包含、无外部 rule-provider 依赖，Clash Verge 可直接导入）
 //

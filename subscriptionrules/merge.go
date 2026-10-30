@@ -3,11 +3,36 @@ package subscriptionrules
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"strings"
 
 	"gopkg.in/yaml.v3"
 )
+
+// Compose builds the rule list served to clients: the critical must-proxy exceptions first,
+// then the administrator's custom domains, then the template itself.
+//
+// Order matters, because the first matching rule wins. Prepending the critical block last keeps
+// YouTube, Google and GitHub on the proxy even when the template was imported from a third-party
+// rule project that sends them direct.
+func Compose(base, custom, critical string) (string, error) {
+	merged, err := Prepend(base, custom)
+	if err != nil {
+		return "", err
+	}
+	return Prepend(merged, critical)
+}
+
+// CanonicalDigest identifies a stored template. Stored copies may use CRLF or carry a trailing
+// newline, so the comparison runs on the normalized form: CRLF folded to LF and surrounding
+// whitespace trimmed.
+func CanonicalDigest(content string) string {
+	canonical := strings.TrimSpace(strings.ReplaceAll(content, "\r\n", "\n"))
+	sum := sha256.Sum256([]byte(canonical))
+	return hex.EncodeToString(sum[:])
+}
 
 // Prepend inserts custom rule items into the base rules sequence, preserving other fields.
 // An empty custom list leaves the administrator's template byte-for-byte unchanged.

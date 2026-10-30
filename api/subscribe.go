@@ -1,7 +1,6 @@
 package api
 
 import (
-	"crypto/sha256"
 	"encoding/base64"
 	"fmt"
 	"os"
@@ -81,9 +80,9 @@ func Subscribe(c *gin.Context) {
 	//vo.Fail("This client is not supported", c)
 }
 
-// getClashRules 返回订阅规则 = 面板配置的自定义直连/代理网站规则（置顶，优先级最高）+ 基础规则
+// getClashRules 返回订阅规则 = 关键服务强制代理（置顶，任何模板都不能覆盖）+ 面板自定义直连/代理网站规则 + 基础规则
 func getClashRules() (string, error) {
-	return subscriptionrules.Prepend(getBaseClashRules(), getCustomClashRules())
+	return subscriptionrules.Compose(getBaseClashRules(), getCustomClashRules(), constant.ClashCriticalProxyRules)
 }
 
 // getCustomClashRules 面板「模板设置」中自定义的直连/代理网站生成的规则
@@ -107,7 +106,7 @@ func getBaseClashRules() string {
 	}
 	rules := strings.TrimSpace(string(content))
 	normalizedRules := strings.ReplaceAll(rules, "\r\n", "\n")
-	rulesDigest := fmt.Sprintf("%x", sha256.Sum256([]byte(normalizedRules)))
+	rulesDigest := subscriptionrules.CanonicalDigest(string(content))
 	if rules == "" || isBuiltinClashRules(rulesDigest, normalizedRules) {
 		return service.DefaultClashRules()
 	}
@@ -123,7 +122,7 @@ func getBaseClashRules() string {
 // isBuiltinClashRules 判断模板是否为历史版本的内置默认内容（可安全替换为当前默认）。
 func isBuiltinClashRules(digest, normalized string) bool {
 	switch digest {
-	case constant.ClashRulesV233SHA256, constant.ClashRulesPreviousSHA256, constant.ClashRulesV250SHA256, constant.ClashRulesV251SHA256:
+	case constant.ClashRulesV233SHA256, constant.ClashRulesPreviousSHA256, constant.ClashRulesV250SHA256, constant.ClashRulesV251SHA256, constant.ClashRulesV252SHA256:
 		return true
 	}
 	return normalized == strings.TrimSpace(constant.ClashRules) ||

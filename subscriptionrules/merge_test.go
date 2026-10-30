@@ -6,6 +6,8 @@ import (
 	"testing"
 
 	"gopkg.in/yaml.v3"
+
+	"trojan-panel/model/constant"
 )
 
 func TestPrepend(t *testing.T) {
@@ -63,5 +65,47 @@ func TestPrependRejectsInvalidTemplates(t *testing.T) {
 		if _, err := Prepend(pair[0], pair[1]); err == nil {
 			t.Fatalf("accepted invalid rule template: %q", strings.Join(pair[:], " / "))
 		}
+	}
+}
+
+func TestComposeKeepsCriticalServicesOnProxy(t *testing.T) {
+	// A template imported from a third-party rule project: mainland first, direct fallback.
+	base := "rules:\n  - GEOIP,CN,DIRECT\n  - MATCH,DIRECT\n"
+	// The panel's own custom domain list can hijack YouTube the same way.
+	custom := "  - DOMAIN-SUFFIX,youtube.com,DIRECT\n"
+	composed, err := Compose(base, custom, constant.ClashCriticalProxyRules)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var document map[string][]string
+	if err := yaml.Unmarshal([]byte(composed), &document); err != nil {
+		t.Fatalf("invalid composed rules: %v", err)
+	}
+	rules := document["rules"]
+	position := func(rule string) int {
+		for i, item := range rules {
+			if item == rule {
+				return i
+			}
+		}
+		return -1
+	}
+	proxy, hijack := position("DOMAIN-SUFFIX,youtube.com,PROXY"), position("DOMAIN-SUFFIX,youtube.com,DIRECT")
+	if proxy < 0 || hijack < 0 || proxy > hijack {
+		t.Fatalf("critical rule did not win over the template: proxy=%d direct=%d", proxy, hijack)
+	}
+	if rules[0] != "DOMAIN-SUFFIX,openai.com,PROXY" {
+		t.Fatalf("critical block is not first: %q", rules[0])
+	}
+}
+
+func TestDefaultTemplateDigest(t *testing.T) {
+	if got := CanonicalDigest(constant.ClashRules); got != constant.ClashRulesV252SHA256 {
+		t.Fatalf("update ClashRulesV252SHA256 after editing the default template: got %s", got)
+	}
+	// A saved copy is compared after CRLF normalization, so either line ending must match.
+	saved := strings.ReplaceAll(constant.ClashRules, "\n", "\r\n") + "\r\n"
+	if got := CanonicalDigest(saved); got != constant.ClashRulesV252SHA256 {
+		t.Fatalf("CRLF copy did not match: got %s", got)
 	}
 }

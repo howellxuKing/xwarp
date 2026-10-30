@@ -29,3 +29,13 @@ Single-label suffixes (including upstream brand TLD entries) are deliberately om
 - v2.3.3、v2.3.4、v2.5.0、v2.5.1 的未修改默认模板按摘要识别后自动升级到新默认；管理员修改过的模板保持不变。
 
 显式例外只保留两类：必须走代理的国外服务（google/youtube/github/openai/telegram 等），以及希望直连的国外下载与更新域名（steam/windowsupdate 等）。
+
+## Routing v2.5.3（关键服务强制代理）
+
+v2.5.2 之后仍然出现「规则模式连不上 YouTube、全局模式正常」，原因有两层，都在 v2.5.3 修掉：
+
+- **关键服务不再受模板影响**：订阅在拼接规则时，先把一段「必须走代理」的例外块插到最前面（`constant.ClashCriticalProxyRules`），再拼管理员自定义域名，最后才是模板。规则是「先匹配先赢」，所以即使模板是从第三方规则项目抄来的（开头 `GEOIP,cn,DIRECT`、结尾 `MATCH,DIRECT`），YouTube/Google/GitHub/OpenAI/Telegram 依然走 `PROXY`；
+- **v2.5.1 的默认模板摘要算错了**：`ClashRulesV251SHA256` 当初按 CRLF、未裁剪的文本计算，而运行时按「CRLF 归一为 LF + 去首尾空白」计算，两者永远不相等。结果是「保存过默认模板」的安装升级到 v2.5.2 后仍然用着 v2.5.1 的旧规则。v2.5.3 改成统一的 `CanonicalDigest`，并补上 `ClashRulesV252SHA256`。
+
+v2.5.3 起，订阅规则的第一条固定是 `DOMAIN-SUFFIX,openai.com,PROXY`，任何管理员模板都无法把它或后面的 YouTube 规则顶掉。
+
