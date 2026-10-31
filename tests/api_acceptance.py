@@ -104,7 +104,7 @@ def main():
                 assert "DOMAIN-SUFFIX,douyin.com,DIRECT" in initial_rules, "Bundled domestic domain routing missing"
                 assert "IP-CIDR6,fc00::/7,DIRECT,no-resolve" in initial_rules
                 assert initial_rules.index("DOMAIN-SUFFIX,openai.com,PROXY") < initial_rules.index("DOMAIN-SUFFIX,douyin.com,DIRECT") < initial_rules.index("GEOIP,cn,DIRECT")
-                assert "GEOIP,cn,DIRECT,no-resolve" not in initial_rules, "GEOIP,cn must resolve domains or mainland sites fall through to PROXY"
+                assert "GEOIP,cn,DIRECT,no-resolve" in initial_rules, "GEOIP,cn must not resolve domains or foreign sites get matched by their resolved IP"
                 assert "GEOIP,private," not in initial_rules, "mihomo only special-cases GEOIP,lan"
                 assert initial_rules.rstrip().endswith("MATCH,PROXY")
                 enrollment = success("/api/security/totp/setup", "POST", {"password": password}, token)

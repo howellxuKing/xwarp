@@ -114,7 +114,13 @@ func getBaseClashRules() string {
 	applied, applyErr := service.ApplyDomesticRules(rules)
 	if applyErr != nil {
 		logrus.Warnf("自定义 Clash 规则模板缺少占位行 %s，本次订阅不含大陆域名直连: %v", constant.ClashDomesticMarker, applyErr)
-		return rules
+		applied = rules
+	}
+	// 模板把未匹配流量兜底成直连、或让 GEOIP,cn 解析域名时，规则模式会把国外站点送去直连。
+	// 这类模板直接作废，回落到内置默认规则，避免客户端拿到一份「全局能用、规则不能用」的配置。
+	if policyErr := subscriptionrules.ValidatePolicy(applied); policyErr != nil {
+		logrus.Warnf("自定义 Clash 规则模板不满足分流模型，本次订阅改用内置默认规则: %v", policyErr)
+		return service.DefaultClashRules()
 	}
 	return applied
 }
@@ -122,7 +128,7 @@ func getBaseClashRules() string {
 // isBuiltinClashRules 判断模板是否为历史版本的内置默认内容（可安全替换为当前默认）。
 func isBuiltinClashRules(digest, normalized string) bool {
 	switch digest {
-	case constant.ClashRulesV233SHA256, constant.ClashRulesPreviousSHA256, constant.ClashRulesV250SHA256, constant.ClashRulesV251SHA256, constant.ClashRulesV252SHA256:
+	case constant.ClashRulesV233SHA256, constant.ClashRulesPreviousSHA256, constant.ClashRulesV250SHA256, constant.ClashRulesV251SHA256, constant.ClashRulesV252SHA256, constant.ClashRulesV254SHA256:
 		return true
 	}
 	return normalized == strings.TrimSpace(constant.ClashRules) ||

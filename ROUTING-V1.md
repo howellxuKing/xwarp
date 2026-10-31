@@ -39,3 +39,13 @@ v2.5.2 之后仍然出现「规则模式连不上 YouTube、全局模式正常�
 
 v2.5.3 起，订阅规则的第一条固定是 `DOMAIN-SUFFIX,openai.com,PROXY`，任何管理员模板都无法把它或后面的 YouTube 规则顶掉。
 
+## Routing v2.5.4（国外域名永不被解析结果改写）
+
+v2.5.3 之后仍然出现「很多国外网站被直连、打不开，全局模式正常」，定性为两条：
+
+- **`GEOIP,cn,DIRECT` 不带 `no-resolve` 时会给域名解析**。未列入域名块的国外站点，一旦 DNS 答案落在大陆 IP（运营商 DNS 污染、CDN 回源国内），就会被这条规则判成直连。v2.5.2 去掉 `no-resolve` 的前提是「大陆域名覆盖足够全」，实际上代价是国外站点被误判，v2.5.4 把 `no-resolve` 加回来；
+- **管理员模板可以破坏分流模型**。v2.5.4 在订阅时用 `subscriptionrules.ValidatePolicy` 检查模板：兜底写成 `MATCH,DIRECT`/`FINAL,DIRECT`，或 `GEOIP,cn,DIRECT` 缺 `no-resolve`，一律判定为不合法模板，**本次订阅回落到内置默认规则并记录告警**，不再把「全局能用、规则不能用」的配置发给客户端。
+
+取舍：`GEOIP,cn,DIRECT,no-resolve` 只对「直接连 IP」的流量生效，大陆站点靠模板内联的 geolocation-cn 域名块直连。未收录的大陆域名会走代理（能打开，略慢），但**任何国外域名都不会再因为解析结果被送去直连**。对翻墙用途来说，这个方向的错误代价小得多。
+
+

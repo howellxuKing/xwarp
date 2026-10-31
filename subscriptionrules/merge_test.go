@@ -100,12 +100,12 @@ func TestComposeKeepsCriticalServicesOnProxy(t *testing.T) {
 }
 
 func TestDefaultTemplateDigest(t *testing.T) {
-	if got := CanonicalDigest(constant.ClashRules); got != constant.ClashRulesV252SHA256 {
-		t.Fatalf("update ClashRulesV252SHA256 after editing the default template: got %s", got)
+	if got := CanonicalDigest(constant.ClashRules); got != constant.ClashRulesV254SHA256 {
+		t.Fatalf("update ClashRulesV254SHA256 after editing the default template: got %s", got)
 	}
 	// A saved copy is compared after CRLF normalization, so either line ending must match.
 	saved := strings.ReplaceAll(constant.ClashRules, "\n", "\r\n") + "\r\n"
-	if got := CanonicalDigest(saved); got != constant.ClashRulesV252SHA256 {
+	if got := CanonicalDigest(saved); got != constant.ClashRulesV254SHA256 {
 		t.Fatalf("CRLF copy did not match: got %s", got)
 	}
 }

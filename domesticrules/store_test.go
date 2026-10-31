@@ -150,7 +150,7 @@ func TestBundledTemplateKeepsRoutingOrder(t *testing.T) {
 	}
 }
 
-func TestDomesticGeoIPMustResolveDomains(t *testing.T) {
+func TestDomesticGeoIPMustNotResolveDomains(t *testing.T) {
 	store := Open(filepath.Join(t.TempDir(), "domestic.json"))
 	applied, err := store.Apply(constant.ClashRules, false)
 	if err != nil {
@@ -162,11 +162,12 @@ func TestDomesticGeoIPMustResolveDomains(t *testing.T) {
 	}
 	var hasDomesticGeoIP bool
 	for _, rule := range document["rules"] {
-		// no-resolve 会让域名连接跳过这条规则，未列入白名单的大陆站点就会绕道国外。
-		if rule == "GEOIP,cn,DIRECT,no-resolve" {
-			t.Fatal("GEOIP,cn must not carry no-resolve")
-		}
+		// 不带 no-resolve 时，未列入域名块的国外站点也会被解析，只要解析结果落在大陆 IP
+		// 就会被判成直连而打不开；域名连接必须只由域名规则或 MATCH,PROXY 决定。
 		if rule == "GEOIP,cn,DIRECT" {
+			t.Fatal("GEOIP,cn must carry no-resolve or foreign domains get matched by their resolved IP")
+		}
+		if rule == "GEOIP,cn,DIRECT,no-resolve" {
 			hasDomesticGeoIP = true
 		}
 		// mihomo 只对 "lan" 做特殊处理，GEOIP,private 在 geodata 模式下会导致整份配置加载失败。
@@ -175,7 +176,7 @@ func TestDomesticGeoIPMustResolveDomains(t *testing.T) {
 		}
 	}
 	if !hasDomesticGeoIP {
-		t.Fatal("missing GEOIP,cn,DIRECT fallback")
+		t.Fatal("missing GEOIP,cn,DIRECT,no-resolve fallback")
 	}
 }
 

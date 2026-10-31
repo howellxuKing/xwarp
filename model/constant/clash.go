@@ -20,8 +20,12 @@ const ClashRulesV250SHA256 = "21a3f7773ada01af31bb4a407a857082673150ef93d119afc0
 // unmodified v2.5.1 template kept the broken rules after upgrading.
 const ClashRulesV251SHA256 = "e6865ea8911b6b0465c3f21167912e5155f8bd3c85e886ac5fad048f4122112d"
 
-// ClashRulesV252SHA256 identifies the unmodified v2.5.2 default template.
+// ClashRulesV252SHA256 identifies the unmodified v2.5.2 and v2.5.3 default template (identical text).
 const ClashRulesV252SHA256 = "c4fbbad7b4038d9e4eacb8727f3dbd09b57cbf9d0d5ebd58ae263632d9a8ce70"
+
+// ClashRulesV254SHA256 identifies the unmodified v2.5.4 default template, the first one that keeps
+// GEOIP,cn on no-resolve so a foreign domain can never be matched by its resolved IP.
+const ClashRulesV254SHA256 = "63615e724059803f6394ed014c8bb949bcc01c4596f5cd884201981a089d3a80"
 
 // ClashDomesticMarker is the placeholder line that the backend expands into the mainland domain
 // block at subscription time. Administrator templates must keep this line; without it the
@@ -62,8 +66,8 @@ const ClashCriticalProxyRules = `  - DOMAIN-SUFFIX,openai.com,PROXY
 // ClashRules 订阅返回的 Clash 规则（自包含、无外部 rule-provider 依赖，Clash Verge 可直接导入）
 //
 // 分流模型：本地/内网直连 → 少量强制代理例外 → 国外下载类例外直连 → 中国大陆域名直连
-// → 中国大陆 IP 直连（含域名解析结果）→ 其余全部代理。
-// 域名维度优先于 IP 维度，避免“国外服务解析到国内 IP 就被直连”这类误判。
+// → 中国大陆 IP 直连（仅直接连 IP 的流量）→ 其余全部代理。
+// 域名维度优先于 IP 维度：国外域名永远走代理，绝不会因为解析结果落在大陆 IP 而被误判。
 const ClashRules = `rules:
   # 1. 本地网络、私人网段与常用国内 DNS 直连
   - GEOIP,lan,DIRECT,no-resolve
@@ -113,10 +117,13 @@ const ClashRules = `rules:
   - DOMAIN-SUFFIX,epgames.com,DIRECT
 
   # 4. 中国大陆域名直连（下一行是占位符，订阅时展开为 geolocation-cn 域名块）
-  # 注意：这一条不能加 no-resolve。加了之后域名连接不会做解析，GEOIP 永远匹配不到，
-  # 未列入上表的大陆网站就会落到 MATCH,PROXY 绕道国外。
+  # 大陆域名由上面的 DOMAIN-SUFFIX 列表决定；这里的 IP 规则故意带 no-resolve。
+  # 不带 no-resolve 时，未列入列表的国外域名也会被解析，只要解析结果落在大陆 IP
+  # （运营商 DNS 污染、CDN 回源国内）就会被判成直连打不开 —— 规则模式不通、全局模式
+  # 正常就是这个原因。加上 no-resolve 后，域名连接只由域名规则或 MATCH,PROXY 决定，
+  # 只有直接连 IP 的流量才按 GEOIP 判定。
   # @XWARP-DOMESTIC@
-  - GEOIP,cn,DIRECT
+  - GEOIP,cn,DIRECT,no-resolve
 
   # 5. 兜底：其余全部走代理
   - MATCH,PROXY
