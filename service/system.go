@@ -178,10 +178,7 @@ func UpdateSystemById(systemDto dto.SystemUpdateDto) error {
 		if strings.TrimSpace(clashRule) == "" {
 			clashRule = constant.ClashRules
 		}
-		// 模板必须保留占位行，否则保存后大陆域名不再自动直连
-		if !strings.Contains(clashRule, constant.ClashDomesticMarker) {
-			return fmt.Errorf("Clash 规则模板缺少占位行 %s：请保留该行，否则保存后大陆域名将不再自动直连", constant.ClashDomesticMarker)
-		}
+		// Standalone provider templates no longer require the legacy inline marker.
 		if err := subscriptionrules.Validate(clashRule); err != nil {
 			return fmt.Errorf("Clash 规则模板不合法: %w", err)
 		}

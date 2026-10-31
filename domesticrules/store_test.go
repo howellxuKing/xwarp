@@ -15,7 +15,7 @@ import (
 	"trojan-panel/model/constant"
 )
 
-const testTemplate = "rules:\n  - DOMAIN-SUFFIX,openai.com,PROXY\n  # @XWARP-DOMESTIC@\n  - GEOIP,cn,DIRECT\n  - MATCH,PROXY\n"
+const testTemplate = "rules:\n  - DOMAIN-SUFFIX,openai.com,PROXY\n  - DOMAIN-SUFFIX,google.com,PROXY\n  - DOMAIN-SUFFIX,youtube.com,PROXY\n  # @XWARP-DOMESTIC@\n  - GEOIP,cn,DIRECT,no-resolve\n  - MATCH,PROXY\n"
 
 func mustApply(t *testing.T, store *Store, base string) string {
 	t.Helper()
@@ -101,7 +101,7 @@ func TestApplyGeoSite(t *testing.T) {
 func TestBundledTemplateKeepsRoutingOrder(t *testing.T) {
 	store := Open(filepath.Join(t.TempDir(), "domestic.json"))
 	for _, geoSite := range []bool{false, true} {
-		applied, err := store.Apply(constant.ClashRules, geoSite)
+		applied, err := store.Apply(testTemplate, geoSite)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -152,7 +152,7 @@ func TestBundledTemplateKeepsRoutingOrder(t *testing.T) {
 
 func TestDomesticGeoIPMustNotResolveDomains(t *testing.T) {
 	store := Open(filepath.Join(t.TempDir(), "domestic.json"))
-	applied, err := store.Apply(constant.ClashRules, false)
+	applied, err := store.Apply(testTemplate, false)
 	if err != nil {
 		t.Fatal(err)
 	}

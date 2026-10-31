@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -31,16 +32,11 @@ func ApplyDomesticRules(base string) (string, error) {
 
 // DefaultClashRules is local-only, including when upstream is unavailable.
 func DefaultClashRules() string {
-	rules, err := ApplyDomesticRules(constant.ClashRules)
-	if err != nil {
-		logrus.Errorf("Clash 默认规则模板不可用，本次订阅不含大陆域名直连: %v", err)
-		return constant.ClashRules
-	}
-	return rules
+	return constant.ClashRules
 }
 
 func CronRefreshDomesticRules() {
-	if os.Getenv("XWARP_DISABLE_RULE_UPDATES") == "1" {
+	if os.Getenv("XWARP_DISABLE_RULE_UPDATES") == "1" || !strings.Contains(constant.ClashRules, constant.ClashDomesticMarker) {
 		return
 	}
 	store := getDomesticStore()

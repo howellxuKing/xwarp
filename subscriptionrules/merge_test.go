@@ -109,3 +109,14 @@ func TestDefaultTemplateDigest(t *testing.T) {
 		t.Fatalf("CRLF copy did not match: got %s", got)
 	}
 }
+
+func TestComposeMigratesRemovedAutomaticGroups(t *testing.T) {
+	base := "rules:\n  - DOMAIN-SUFFIX,example.org,AUTO\n  - DOMAIN-SUFFIX,example.net,FALLBACK\n  - MATCH,PROXY\n"
+	got, err := Compose(base, "", constant.ClashLocalRules)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(got, ",AUTO") || strings.Contains(got, ",FALLBACK") || !strings.Contains(got, "example.org,PROXY") {
+		t.Fatal("removed groups left an unresolved policy reference")
+	}
+}

@@ -29,7 +29,7 @@ const ClashRulesV254SHA256 = "63615e724059803f6394ed014c8bb949bcc01c4596f5cd8842
 
 // Domestic domains are expanded locally at subscription generation.
 const ClashDomesticMarker = "@XWARP-DOMESTIC@"
-const ClashRulesV3SHA256 = "f4c0977533e1132874e13c85463300872b8c6697455b3729c9828a0fd700958b"
+const ClashRulesV3SHA256 = "ae932dd94ae01c27612f6e13ea11705ffe0b0fe5ca69780751617a592e2bc4ef"
 
 // Explicit local ranges only; fake-IP benchmark ranges are not LAN.
 const ClashLocalRules = `  - DOMAIN,localhost,DIRECT
@@ -44,66 +44,38 @@ const ClashLocalRules = `  - DOMAIN,localhost,DIRECT
   - IP-CIDR6,fe80::/10,DIRECT,no-resolve
 `
 
-// V3: local, administrator exceptions, overseas services, mainland domains, IP fallback, proxy.
-const ClashRules = "rules:\n" + ClashLocalRules + `
-  # 手动网站例外在本地规则之后、以下规则之前生效。
-  # 常用海外服务明确代理。
-  - DOMAIN-SUFFIX,openai.com,PROXY
-  - DOMAIN-SUFFIX,chatgpt.com,PROXY
-  - DOMAIN-SUFFIX,oaistatic.com,PROXY
-  - DOMAIN-SUFFIX,oaiusercontent.com,PROXY
-  - DOMAIN-SUFFIX,anthropic.com,PROXY
-  - DOMAIN-SUFFIX,claude.ai,PROXY
-  - DOMAIN-SUFFIX,google.com,PROXY
-  - DOMAIN-SUFFIX,googleapis.com,PROXY
-  - DOMAIN-SUFFIX,gstatic.com,PROXY
-  - DOMAIN-SUFFIX,googlevideo.com,PROXY
-  - DOMAIN-SUFFIX,youtube.com,PROXY
-  - DOMAIN-SUFFIX,youtu.be,PROXY
-  - DOMAIN-SUFFIX,ytimg.com,PROXY
-  - DOMAIN-SUFFIX,ggpht.com,PROXY
-  - DOMAIN-SUFFIX,youtube-nocookie.com,PROXY
-  - DOMAIN-SUFFIX,github.com,PROXY
-  - DOMAIN-SUFFIX,githubassets.com,PROXY
-  - DOMAIN-SUFFIX,githubusercontent.com,PROXY
-  - DOMAIN-SUFFIX,telegram.org,PROXY
-  - DOMAIN-SUFFIX,t.me,PROXY
-  - DOMAIN-SUFFIX,twitter.com,PROXY
-  - DOMAIN-SUFFIX,twimg.com,PROXY
-  - DOMAIN-SUFFIX,x.com,PROXY
-  - DOMAIN-SUFFIX,muse.ai,PROXY
+// V3 cloud rule sets for Clash Verge/Mihomo. Cache files are replaced daily.
+const ClashRules = `rule-providers:
+  direct:
+    type: http
+    behavior: domain
+    format: yaml
+    interval: 86400
+    proxy: PROXY
+    path: ./ruleset/xwarp-direct.yaml
+    url: https://testingcf.jsdelivr.net/gh/Loyalsoldier/clash-rules@release/direct.txt
+  cncidr:
+    type: http
+    behavior: ipcidr
+    format: yaml
+    interval: 86400
+    proxy: PROXY
+    path: ./ruleset/xwarp-cncidr.yaml
+    url: https://testingcf.jsdelivr.net/gh/Loyalsoldier/clash-rules@release/cncidr.txt
 
-  # 常用国内服务基础名单，独立于自动清单。
+rules:
+` + ClashLocalRules + `
+  # 手动网站例外在本地规则之后生效。广告拦截默认关闭。
+  # 常用国内站点保底，完整分类由下面的规则集维护。
   - DOMAIN-SUFFIX,qq.com,DIRECT
-  - DOMAIN-SUFFIX,qpic.cn,DIRECT
-  - DOMAIN-SUFFIX,gtimg.cn,DIRECT
-  - DOMAIN-SUFFIX,wechat.com,DIRECT
-  - DOMAIN-SUFFIX,tencent.com,DIRECT
   - DOMAIN-SUFFIX,taobao.com,DIRECT
-  - DOMAIN-SUFFIX,alicdn.com,DIRECT
-  - DOMAIN-SUFFIX,tmall.com,DIRECT
   - DOMAIN-SUFFIX,alipay.com,DIRECT
   - DOMAIN-SUFFIX,jd.com,DIRECT
-  - DOMAIN-SUFFIX,360buyimg.com,DIRECT
-  - DOMAIN-SUFFIX,pinduoduo.com,DIRECT
-  - DOMAIN-SUFFIX,baidu.com,DIRECT
-  - DOMAIN-SUFFIX,bdstatic.com,DIRECT
-  - DOMAIN-SUFFIX,163.com,DIRECT
-  - DOMAIN-SUFFIX,126.com,DIRECT
-  - DOMAIN-SUFFIX,sohu.com,DIRECT
-  - DOMAIN-SUFFIX,sina.com.cn,DIRECT
   - DOMAIN-SUFFIX,bilibili.com,DIRECT
-  - DOMAIN-SUFFIX,hdslb.com,DIRECT
-  - DOMAIN-SUFFIX,iqiyi.com,DIRECT
-  - DOMAIN-SUFFIX,qiyi.com,DIRECT
-  - DOMAIN-SUFFIX,youku.com,DIRECT
+  - DOMAIN-SUFFIX,baidu.com,DIRECT
   - DOMAIN-SUFFIX,douyin.com,DIRECT
   - DOMAIN-SUFFIX,jinritemai.com,DIRECT
-  - DOMAIN-SUFFIX,byteimg.com,DIRECT
-
-  # 自动国内域名清单：更新失败保留上一版。
-  # @XWARP-DOMESTIC@
-  # 中国 IP 补充匹配；信息不足时默认代理。
-  - GEOIP,cn,DIRECT,no-resolve
+  - RULE-SET,direct,DIRECT
+  - RULE-SET,cncidr,DIRECT,no-resolve
   - MATCH,PROXY
 `

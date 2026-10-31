@@ -14,6 +14,9 @@ import (
 // Compose protects local destinations, then honours administrator exceptions and the template.
 // No overseas rule block is secretly prepended over administrator choices.
 func Compose(base, custom, local string) (string, error) {
+	if err := Validate(base); err != nil {
+		return "", err
+	}
 	merged, err := Prepend(base, custom)
 	if err != nil {
 		return "", err
@@ -34,12 +37,26 @@ func Compose(base, custom, local string) (string, error) {
 		seen := map[string]bool{}
 		items := fields[i+1].Content[:0]
 		for _, item := range fields[i+1].Content {
+			// Historical templates may still reference the removed automatic groups.
+			parts := strings.Split(item.Value, ",")
+			policy := len(parts) - 1
+			if policy > 0 && strings.TrimSpace(parts[policy]) == "no-resolve" {
+				policy--
+			}
+			if policy > 0 && (strings.TrimSpace(parts[policy]) == "AUTO" || strings.TrimSpace(parts[policy]) == "FALLBACK") {
+				parts[policy] = "PROXY"
+				item.Value = strings.Join(parts, ",")
+			}
 			if !seen[item.Value] {
 				seen[item.Value] = true
 				items = append(items, item)
 			}
 		}
 		fields[i+1].Content = items
+	}
+	// Validate the composed result, including provider references and terminal policy.
+	if err := ValidatePolicyNode(&document); err != nil {
+		return "", err
 	}
 	var output bytes.Buffer
 	encoder := yaml.NewEncoder(&output)

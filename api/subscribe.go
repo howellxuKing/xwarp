@@ -111,10 +111,11 @@ func getBaseClashRules() string {
 		return service.DefaultClashRules()
 	}
 	// 自定义模板也要展开大陆域名块，否则国内网站会退化为按 IP 判定
-	applied, applyErr := service.ApplyDomesticRules(rules)
-	if applyErr != nil {
-		logrus.Warnf("自定义 Clash 规则模板缺少占位行 %s，本次订阅不含大陆域名直连: %v", constant.ClashDomesticMarker, applyErr)
-		applied = rules
+	applied := rules
+	if strings.Contains(rules, constant.ClashDomesticMarker) {
+		var applyErr error
+		applied, applyErr = service.ApplyDomesticRules(rules)
+		if applyErr != nil { return service.DefaultClashRules() }
 	}
 	// 模板把未匹配流量兜底成直连、或让 GEOIP,cn 解析域名时，规则模式会把国外站点送去直连。
 	// 这类模板直接作废，回落到内置默认规则，避免客户端拿到一份「全局能用、规则不能用」的配置。

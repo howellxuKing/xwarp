@@ -103,11 +103,12 @@ def main():
                 initial_rules = request(subscription)[1]
                 assert "DOMAIN-SUFFIX,douyin.com,DIRECT" in initial_rules, "Bundled domestic domain routing missing"
                 assert "IP-CIDR6,fc00::/7,DIRECT,no-resolve" in initial_rules
-                assert initial_rules.index("DOMAIN-SUFFIX,openai.com,PROXY") < initial_rules.index("DOMAIN-SUFFIX,douyin.com,DIRECT") < initial_rules.index("GEOIP,cn,DIRECT")
-                assert "GEOIP,cn,DIRECT,no-resolve" in initial_rules, "GEOIP,cn must not resolve domains or foreign sites get matched by their resolved IP"
+                assert "rule-providers:" in initial_rules
+                assert initial_rules.index("RULE-SET,direct,DIRECT") < initial_rules.index("RULE-SET,cncidr,DIRECT,no-resolve") < initial_rules.index("MATCH,PROXY")
                 assert "GEOIP,private," not in initial_rules, "mihomo only special-cases GEOIP,lan"
                 assert initial_rules.rstrip().endswith("MATCH,PROXY")
-                assert "DOMAIN-SUFFIX,muse.ai,PROXY" in initial_rules
+                assert "proxy: PROXY" in initial_rules and "interval: 86400" in initial_rules
+                assert "reject.txt" not in initial_rules
                 assert "DOMAIN-SUFFIX,qq.com,DIRECT" in initial_rules
                 assert "GEOIP,lan," not in initial_rules
                 assert "name: AUTO" not in initial_rules and "name: FALLBACK" not in initial_rules
@@ -171,10 +172,10 @@ def main():
                 (folder / "config/template/template-clash-rule.yaml").write_text("rules:\n  - DOMAIN,admin-fixture.example,DIRECT\n  # @XWARP-DOMESTIC@\n  - GEOIP,cn,DIRECT\n  - MATCH,DIRECT\n")
                 fallback_status, fallback_rules, _ = request(rotated)
                 assert fallback_status == 200 and "admin-fixture.example" not in fallback_rules
-                assert "GEOIP,cn,DIRECT,no-resolve" in fallback_rules
-                # 缺少占位行的模板必须被拒绝，而不是静默丢失大陆域名
+                assert "RULE-SET,cncidr,DIRECT,no-resolve" in fallback_rules
+                # Standalone templates are valid without the old inline placeholder.
                 system["clashRule"] = "rules:\n  - DOMAIN,admin-fixture.example,DIRECT\n  - MATCH,PROXY\n"
-                rejected("/api/system/updateSystemById", "POST", system, token3)
+                success("/api/system/updateSystemById", "POST", system, token3)
                 system["clashRule"] = original_template
                 success("/api/system/updateSystemById", "POST", system, token3)
                 baseline_subscription = request(rotated)[1]

@@ -14,6 +14,9 @@ func TestValidatePolicyAcceptsTheBuiltInTemplate(t *testing.T) {
 
 func TestValidatePolicyRejectsTemplatesThatBreakRuleMode(t *testing.T) {
 	for _, template := range []string{
+		"rules:\n  - DOMAIN-SUFFIX\n  - MATCH,PROXY\n",
+		"rules:\n  - RULE-SET,missing,DIRECT\n  - MATCH,PROXY\n",
+		"rules:\n  - MATCH,PROXY\n  - DOMAIN,late.example,DIRECT\n",
 		// Every unmatched foreign site becomes a direct connection.
 		"rules:\n  - GEOIP,cn,DIRECT,no-resolve\n  - MATCH,DIRECT\n",
 		"rules:\n  - FINAL,DIRECT\n",

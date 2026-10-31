@@ -12,11 +12,7 @@ import (
 // Domain-only HTTP/SOCKS requests have not necessarily performed a local DNS lookup.
 // Their rules must not depend on no-resolve GEOIP discovering an address for them.
 func TestCommonMainlandDomainsStayDirect(t *testing.T) {
-	base, err := Open("").Apply(constant.ClashRules, false)
-	if err != nil {
-		t.Fatal(err)
-	}
-	full, err := subscriptionrules.Compose(base, "", constant.ClashLocalRules)
+	full, err := subscriptionrules.Compose(constant.ClashRules, "", constant.ClashLocalRules)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -23,10 +23,25 @@ func ValidatePolicy(template string) error {
 	if err := yaml.Unmarshal([]byte(template), &document); err != nil {
 		return fmt.Errorf("invalid rule template: %w", err)
 	}
+	return ValidatePolicyNode(&document)
+}
+
+func ValidatePolicyNode(document *yaml.Node) error {
 	if len(document.Content) != 1 || document.Content[0].Kind != yaml.MappingNode {
 		return fmt.Errorf("rule template must be a mapping")
 	}
 	fields := document.Content[0].Content
+	providers := map[string]bool{}
+	for i := 0; i+1 < len(fields); i += 2 {
+		if fields[i].Value == "rule-providers" {
+			if fields[i+1].Kind != yaml.MappingNode {
+				return fmt.Errorf("rule-providers must be a mapping")
+			}
+			for j := 0; j+1 < len(fields[i+1].Content); j += 2 {
+				providers[fields[i+1].Content[j].Value] = true
+			}
+		}
+	}
 	for i := 0; i+1 < len(fields); i += 2 {
 		if fields[i].Value != "rules" {
 			continue
@@ -41,6 +56,9 @@ func ValidatePolicy(template string) error {
 			}
 			parts := strings.Split(item.Value, ",")
 			kind := strings.ToUpper(strings.TrimSpace(parts[0]))
+			if kind == "RULE-SET" && !providers[strings.TrimSpace(parts[1])] {
+				return fmt.Errorf("undefined rule provider %q", parts[1])
+			}
 			if kind == "MATCH" || kind == "FINAL" {
 				terminal++
 				if len(parts) != 2 || strings.TrimSpace(parts[1]) != "PROXY" || index != len(fields[i+1].Content)-1 {
@@ -61,7 +79,7 @@ func validateRule(rule string) error {
 		parts[index] = strings.TrimSpace(parts[index])
 	}
 	if len(parts) < 2 {
-		return nil
+		return fmt.Errorf("invalid rule expression %q", rule)
 	}
 	kind := strings.ToUpper(parts[0])
 	switch kind {
@@ -70,11 +88,18 @@ func validateRule(rule string) error {
 			return fmt.Errorf("catch-all rule %q sends unmatched traffic direct; keep MATCH,PROXY", rule)
 		}
 	case "GEOIP":
+		if len(parts) < 3 || parts[1] == "" || parts[2] == "" {
+			return fmt.Errorf("incomplete GEOIP rule")
+		}
 		if !strings.EqualFold(parts[1], "cn") {
 			return nil
 		}
 		if len(parts) > 2 && strings.EqualFold(parts[2], "DIRECT") && !hasNoResolve(parts[3:]) {
 			return fmt.Errorf("rule %q lets a domain connection be matched by its resolved IP; add no-resolve", rule)
+		}
+	case "DOMAIN", "DOMAIN-SUFFIX", "DOMAIN-KEYWORD", "DOMAIN-REGEX", "GEOSITE", "IP-CIDR", "IP-CIDR6", "RULE-SET", "PROCESS-NAME":
+		if len(parts) < 3 || parts[1] == "" || parts[2] == "" {
+			return fmt.Errorf("incomplete rule %q", rule)
 		}
 	}
 	return nil
