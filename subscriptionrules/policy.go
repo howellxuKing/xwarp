@@ -16,6 +16,9 @@ import (
 // foreign site whose DNS answer happens to land on a mainland IP is sent direct too. Both fail
 // only in rule mode, because global mode ignores the rule list entirely.
 func ValidatePolicy(template string) error {
+	if err := Validate(template); err != nil {
+		return err
+	}
 	var document yaml.Node
 	if err := yaml.Unmarshal([]byte(template), &document); err != nil {
 		return fmt.Errorf("invalid rule template: %w", err)
@@ -28,13 +31,25 @@ func ValidatePolicy(template string) error {
 		if fields[i].Value != "rules" {
 			continue
 		}
-		for _, item := range fields[i+1].Content {
+		terminal := 0
+		for index, item := range fields[i+1].Content {
 			if item.Kind != yaml.ScalarNode {
 				continue
 			}
 			if err := validateRule(item.Value); err != nil {
 				return err
 			}
+			parts := strings.Split(item.Value, ",")
+			kind := strings.ToUpper(strings.TrimSpace(parts[0]))
+			if kind == "MATCH" || kind == "FINAL" {
+				terminal++
+				if len(parts) != 2 || strings.TrimSpace(parts[1]) != "PROXY" || index != len(fields[i+1].Content)-1 {
+					return fmt.Errorf("the single terminal rule must be MATCH,PROXY at the end")
+				}
+			}
+		}
+		if terminal != 1 {
+			return fmt.Errorf("the template must end with a single MATCH,PROXY")
 		}
 	}
 	return nil

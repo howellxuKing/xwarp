@@ -27,50 +27,14 @@ const ClashRulesV252SHA256 = "c4fbbad7b4038d9e4eacb8727f3dbd09b57cbf9d0d5ebd58ae
 // GEOIP,cn on no-resolve so a foreign domain can never be matched by its resolved IP.
 const ClashRulesV254SHA256 = "63615e724059803f6394ed014c8bb949bcc01c4596f5cd884201981a089d3a80"
 
-// ClashDomesticMarker is the placeholder line that the backend expands into the mainland domain
-// block at subscription time. Administrator templates must keep this line; without it the
-// mainland domains silently stop being routed direct.
+// Domestic domains are expanded locally at subscription generation.
 const ClashDomesticMarker = "@XWARP-DOMESTIC@"
+const ClashRulesV3SHA256 = "f4c0977533e1132874e13c85463300872b8c6697455b3729c9828a0fd700958b"
 
-// ClashCriticalProxyRules are prepended ahead of every subscription, including templates and
-// custom domains that administrators imported from third-party rule projects.
-//
-// The first matching rule wins, so a template that starts with GEOIP,cn or ends with MATCH,DIRECT
-// used to send YouTube, Google and GitHub direct, where they simply do not work from mainland
-// China. These services are the reason the panel exists, so no template may override them.
-const ClashCriticalProxyRules = `  - DOMAIN-SUFFIX,openai.com,PROXY
-  - DOMAIN-SUFFIX,chatgpt.com,PROXY
-  - DOMAIN-SUFFIX,oaistatic.com,PROXY
-  - DOMAIN-SUFFIX,oaiusercontent.com,PROXY
-  - DOMAIN-SUFFIX,anthropic.com,PROXY
-  - DOMAIN-SUFFIX,claude.ai,PROXY
-  - DOMAIN-SUFFIX,google.com,PROXY
-  - DOMAIN-SUFFIX,googleapis.com,PROXY
-  - DOMAIN-SUFFIX,gstatic.com,PROXY
-  - DOMAIN-SUFFIX,googlevideo.com,PROXY
-  - DOMAIN-SUFFIX,ggpht.com,PROXY
-  - DOMAIN-SUFFIX,youtube.com,PROXY
-  - DOMAIN-SUFFIX,youtu.be,PROXY
-  - DOMAIN-SUFFIX,ytimg.com,PROXY
-  - DOMAIN-SUFFIX,youtube-nocookie.com,PROXY
-  - DOMAIN-SUFFIX,github.com,PROXY
-  - DOMAIN-SUFFIX,githubassets.com,PROXY
-  - DOMAIN-SUFFIX,githubusercontent.com,PROXY
-  - DOMAIN-SUFFIX,telegram.org,PROXY
-  - DOMAIN-SUFFIX,t.me,PROXY
-  - DOMAIN-SUFFIX,twitter.com,PROXY
-  - DOMAIN-SUFFIX,twimg.com,PROXY
-  - DOMAIN-SUFFIX,x.com,PROXY
-`
-
-// ClashRules 订阅返回的 Clash 规则（自包含、无外部 rule-provider 依赖，Clash Verge 可直接导入）
-//
-// 分流模型：本地/内网直连 → 少量强制代理例外 → 国外下载类例外直连 → 中国大陆域名直连
-// → 中国大陆 IP 直连（仅直接连 IP 的流量）→ 其余全部代理。
-// 域名维度优先于 IP 维度：国外域名永远走代理，绝不会因为解析结果落在大陆 IP 而被误判。
-const ClashRules = `rules:
-  # 1. 本地网络、私人网段与常用国内 DNS 直连
-  - GEOIP,lan,DIRECT,no-resolve
+// Explicit local ranges only; fake-IP benchmark ranges are not LAN.
+const ClashLocalRules = `  - DOMAIN,localhost,DIRECT
+  - DOMAIN-SUFFIX,local,DIRECT
+  - DOMAIN-SUFFIX,lan,DIRECT
   - IP-CIDR,127.0.0.0/8,DIRECT,no-resolve
   - IP-CIDR,10.0.0.0/8,DIRECT,no-resolve
   - IP-CIDR,172.16.0.0/12,DIRECT,no-resolve
@@ -78,14 +42,12 @@ const ClashRules = `rules:
   - IP-CIDR6,::1/128,DIRECT,no-resolve
   - IP-CIDR6,fc00::/7,DIRECT,no-resolve
   - IP-CIDR6,fe80::/10,DIRECT,no-resolve
-  - IP-CIDR,223.5.5.5/32,DIRECT,no-resolve
-  - IP-CIDR,119.29.29.29/32,DIRECT,no-resolve
-  - IP-CIDR,180.76.76.76/32,DIRECT,no-resolve
-  - DOMAIN,localhost,DIRECT
-  - DOMAIN-SUFFIX,local,DIRECT
-  - DOMAIN-SUFFIX,lan,DIRECT
+`
 
-  # 2. 必须走代理的例外（必须排在中国大陆直连之前）
+// V3: local, administrator exceptions, overseas services, mainland domains, IP fallback, proxy.
+const ClashRules = "rules:\n" + ClashLocalRules + `
+  # 手动网站例外在本地规则之后、以下规则之前生效。
+  # 常用海外服务明确代理。
   - DOMAIN-SUFFIX,openai.com,PROXY
   - DOMAIN-SUFFIX,chatgpt.com,PROXY
   - DOMAIN-SUFFIX,oaistatic.com,PROXY
@@ -96,10 +58,10 @@ const ClashRules = `rules:
   - DOMAIN-SUFFIX,googleapis.com,PROXY
   - DOMAIN-SUFFIX,gstatic.com,PROXY
   - DOMAIN-SUFFIX,googlevideo.com,PROXY
-  - DOMAIN-SUFFIX,ggpht.com,PROXY
   - DOMAIN-SUFFIX,youtube.com,PROXY
   - DOMAIN-SUFFIX,youtu.be,PROXY
   - DOMAIN-SUFFIX,ytimg.com,PROXY
+  - DOMAIN-SUFFIX,ggpht.com,PROXY
   - DOMAIN-SUFFIX,youtube-nocookie.com,PROXY
   - DOMAIN-SUFFIX,github.com,PROXY
   - DOMAIN-SUFFIX,githubassets.com,PROXY
@@ -109,22 +71,39 @@ const ClashRules = `rules:
   - DOMAIN-SUFFIX,twitter.com,PROXY
   - DOMAIN-SUFFIX,twimg.com,PROXY
   - DOMAIN-SUFFIX,x.com,PROXY
+  - DOMAIN-SUFFIX,muse.ai,PROXY
 
-  # 3. 国外域名但希望直连：游戏下载与系统更新，避免走代理消耗流量
-  - DOMAIN-SUFFIX,steamcontent.com,DIRECT
-  - DOMAIN-SUFFIX,steamserver.net,DIRECT
-  - DOMAIN-SUFFIX,cm.steampowered.com,DIRECT
-  - DOMAIN-SUFFIX,epgames.com,DIRECT
+  # 常用国内服务基础名单，独立于自动清单。
+  - DOMAIN-SUFFIX,qq.com,DIRECT
+  - DOMAIN-SUFFIX,qpic.cn,DIRECT
+  - DOMAIN-SUFFIX,gtimg.cn,DIRECT
+  - DOMAIN-SUFFIX,wechat.com,DIRECT
+  - DOMAIN-SUFFIX,tencent.com,DIRECT
+  - DOMAIN-SUFFIX,taobao.com,DIRECT
+  - DOMAIN-SUFFIX,alicdn.com,DIRECT
+  - DOMAIN-SUFFIX,tmall.com,DIRECT
+  - DOMAIN-SUFFIX,alipay.com,DIRECT
+  - DOMAIN-SUFFIX,jd.com,DIRECT
+  - DOMAIN-SUFFIX,360buyimg.com,DIRECT
+  - DOMAIN-SUFFIX,pinduoduo.com,DIRECT
+  - DOMAIN-SUFFIX,baidu.com,DIRECT
+  - DOMAIN-SUFFIX,bdstatic.com,DIRECT
+  - DOMAIN-SUFFIX,163.com,DIRECT
+  - DOMAIN-SUFFIX,126.com,DIRECT
+  - DOMAIN-SUFFIX,sohu.com,DIRECT
+  - DOMAIN-SUFFIX,sina.com.cn,DIRECT
+  - DOMAIN-SUFFIX,bilibili.com,DIRECT
+  - DOMAIN-SUFFIX,hdslb.com,DIRECT
+  - DOMAIN-SUFFIX,iqiyi.com,DIRECT
+  - DOMAIN-SUFFIX,qiyi.com,DIRECT
+  - DOMAIN-SUFFIX,youku.com,DIRECT
+  - DOMAIN-SUFFIX,douyin.com,DIRECT
+  - DOMAIN-SUFFIX,jinritemai.com,DIRECT
+  - DOMAIN-SUFFIX,byteimg.com,DIRECT
 
-  # 4. 中国大陆域名直连（下一行是占位符，订阅时展开为 geolocation-cn 域名块）
-  # 大陆域名由上面的 DOMAIN-SUFFIX 列表决定；这里的 IP 规则故意带 no-resolve。
-  # 不带 no-resolve 时，未列入列表的国外域名也会被解析，只要解析结果落在大陆 IP
-  # （运营商 DNS 污染、CDN 回源国内）就会被判成直连打不开 —— 规则模式不通、全局模式
-  # 正常就是这个原因。加上 no-resolve 后，域名连接只由域名规则或 MATCH,PROXY 决定，
-  # 只有直接连 IP 的流量才按 GEOIP 判定。
+  # 自动国内域名清单：更新失败保留上一版。
   # @XWARP-DOMESTIC@
+  # 中国 IP 补充匹配；信息不足时默认代理。
   - GEOIP,cn,DIRECT,no-resolve
-
-  # 5. 兜底：其余全部走代理
   - MATCH,PROXY
 `

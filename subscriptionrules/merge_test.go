@@ -68,12 +68,12 @@ func TestPrependRejectsInvalidTemplates(t *testing.T) {
 	}
 }
 
-func TestComposeKeepsCriticalServicesOnProxy(t *testing.T) {
+func TestComposeHonoursManualExceptionsAfterLocal(t *testing.T) {
 	// A template imported from a third-party rule project: mainland first, direct fallback.
-	base := "rules:\n  - GEOIP,CN,DIRECT\n  - MATCH,DIRECT\n"
+	base := "rules:\n  - DOMAIN-SUFFIX,youtube.com,PROXY\n  - MATCH,PROXY\n"
 	// The panel's own custom domain list can hijack YouTube the same way.
 	custom := "  - DOMAIN-SUFFIX,youtube.com,DIRECT\n"
-	composed, err := Compose(base, custom, constant.ClashCriticalProxyRules)
+	composed, err := Compose(base, custom, constant.ClashLocalRules)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -91,21 +91,21 @@ func TestComposeKeepsCriticalServicesOnProxy(t *testing.T) {
 		return -1
 	}
 	proxy, hijack := position("DOMAIN-SUFFIX,youtube.com,PROXY"), position("DOMAIN-SUFFIX,youtube.com,DIRECT")
-	if proxy < 0 || hijack < 0 || proxy > hijack {
-		t.Fatalf("critical rule did not win over the template: proxy=%d direct=%d", proxy, hijack)
+	if proxy < 0 || hijack < 0 || hijack > proxy {
+		t.Fatalf("administrator exception did not win over the template: proxy=%d direct=%d", proxy, hijack)
 	}
-	if rules[0] != "DOMAIN-SUFFIX,openai.com,PROXY" {
-		t.Fatalf("critical block is not first: %q", rules[0])
+	if rules[0] != "DOMAIN,localhost,DIRECT" {
+		t.Fatalf("local block is not first: %q", rules[0])
 	}
 }
 
 func TestDefaultTemplateDigest(t *testing.T) {
-	if got := CanonicalDigest(constant.ClashRules); got != constant.ClashRulesV254SHA256 {
-		t.Fatalf("update ClashRulesV254SHA256 after editing the default template: got %s", got)
+	if got := CanonicalDigest(constant.ClashRules); got != constant.ClashRulesV3SHA256 {
+		t.Fatalf("update ClashRulesV3SHA256 after editing the default template: got %s", got)
 	}
 	// A saved copy is compared after CRLF normalization, so either line ending must match.
 	saved := strings.ReplaceAll(constant.ClashRules, "\n", "\r\n") + "\r\n"
-	if got := CanonicalDigest(saved); got != constant.ClashRulesV254SHA256 {
+	if got := CanonicalDigest(saved); got != constant.ClashRulesV3SHA256 {
 		t.Fatalf("CRLF copy did not match: got %s", got)
 	}
 }

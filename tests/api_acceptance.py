@@ -107,6 +107,11 @@ def main():
                 assert "GEOIP,cn,DIRECT,no-resolve" in initial_rules, "GEOIP,cn must not resolve domains or foreign sites get matched by their resolved IP"
                 assert "GEOIP,private," not in initial_rules, "mihomo only special-cases GEOIP,lan"
                 assert initial_rules.rstrip().endswith("MATCH,PROXY")
+                assert "DOMAIN-SUFFIX,muse.ai,PROXY" in initial_rules
+                assert "DOMAIN-SUFFIX,qq.com,DIRECT" in initial_rules
+                assert "GEOIP,lan," not in initial_rules
+                assert "name: AUTO" not in initial_rules and "name: FALLBACK" not in initial_rules
+                assert "REJECT" in initial_rules  # This fixture starts with no nodes.
                 enrollment = success("/api/security/totp/setup", "POST", {"password": password}, token)
                 recovery = success("/api/security/totp/confirm", "POST", {"password": password, "code": code(enrollment["secret"])}, token)["recoveryCodes"]
                 assert len(recovery) == 8
@@ -152,8 +157,9 @@ def main():
                 assert "admin-fixture.example,DIRECT" in custom_template_subscription
                 assert "DOMAIN-SUFFIX,douyin.com,DIRECT" in custom_template_subscription
                 assert custom_template_subscription.index("admin-fixture.example,DIRECT") < custom_template_subscription.index("DOMAIN-SUFFIX,douyin.com,DIRECT") < custom_template_subscription.index("GEOIP,cn,DIRECT")
-                # 第三方模板把 YouTube 写成直连也不能生效：关键服务强制代理块必须排在最前面
-                assert custom_template_subscription.index("DOMAIN-SUFFIX,youtube.com,PROXY") < custom_template_subscription.index("DOMAIN-SUFFIX,youtube.com,DIRECT")
+                # Explicit administrator choices are no longer overwritten by a hidden block.
+                assert "DOMAIN-SUFFIX,youtube.com,DIRECT" in custom_template_subscription
+                assert "DOMAIN-SUFFIX,youtube.com,PROXY" not in custom_template_subscription
                 # 兜底直连、或 GEOIP,cn 解析域名的模板会让规则模式把国外站点送去直连，保存即拒绝
                 for unsafe in (
                     "rules:\n  - DOMAIN,admin-fixture.example,DIRECT\n  # @XWARP-DOMESTIC@\n  - GEOIP,cn,DIRECT,no-resolve\n  - MATCH,DIRECT\n",

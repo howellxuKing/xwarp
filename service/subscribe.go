@@ -254,17 +254,12 @@ func SubscribeClash(pass string) (*model.Account, string, []byte, vo.SystemVo, e
 			proxies = append(proxies, *item.Name)
 		}
 	}
-	proxyGroups := make([]bo.ProxyGroup, 0, 3)
+	proxyGroups := make([]bo.ProxyGroup, 0, 1)
 	if len(proxies) == 0 {
 		// 没有节点时仍生成可加载的配置，避免客户端整份订阅报错
-		proxyGroups = append(proxyGroups, bo.ProxyGroup{Name: "PROXY", Type: "select", Proxies: []string{"DIRECT"}})
+		proxyGroups = append(proxyGroups, bo.ProxyGroup{Name: "PROXY", Type: "select", Proxies: []string{"REJECT"}})
 	} else {
-		proxyGroups = append(proxyGroups,
-			// 默认选自动测速，用户不需要手动挑节点
-			bo.ProxyGroup{Name: "PROXY", Type: "select", Proxies: append([]string{"AUTO", "FALLBACK", "DIRECT"}, proxies...)},
-			bo.ProxyGroup{Name: "AUTO", Type: "url-test", Proxies: proxies, Url: "https://www.gstatic.com/generate_204", Interval: 300, Tolerance: 50},
-			bo.ProxyGroup{Name: "FALLBACK", Type: "fallback", Proxies: proxies, Url: "https://www.gstatic.com/generate_204", Interval: 300},
-		)
+		proxyGroups = append(proxyGroups, bo.ProxyGroup{Name: "PROXY", Type: "select", Proxies: proxies})
 	}
 	clashConfig.ProxyGroups = proxyGroups
 	clashConfig.Proxies = ClashConfigInterface

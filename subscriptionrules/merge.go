@@ -11,18 +11,43 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// Compose builds the rule list served to clients: the critical must-proxy exceptions first,
-// then the administrator's custom domains, then the template itself.
-//
-// Order matters, because the first matching rule wins. Prepending the critical block last keeps
-// YouTube, Google and GitHub on the proxy even when the template was imported from a third-party
-// rule project that sends them direct.
-func Compose(base, custom, critical string) (string, error) {
+// Compose protects local destinations, then honours administrator exceptions and the template.
+// No overseas rule block is secretly prepended over administrator choices.
+func Compose(base, custom, local string) (string, error) {
 	merged, err := Prepend(base, custom)
 	if err != nil {
 		return "", err
 	}
-	return Prepend(merged, critical)
+	merged, err = Prepend(merged, local)
+	if err != nil {
+		return "", err
+	}
+	var document yaml.Node
+	if err := yaml.Unmarshal([]byte(merged), &document); err != nil {
+		return "", err
+	}
+	fields := document.Content[0].Content
+	for i := 0; i < len(fields); i += 2 {
+		if fields[i].Value != "rules" {
+			continue
+		}
+		seen := map[string]bool{}
+		items := fields[i+1].Content[:0]
+		for _, item := range fields[i+1].Content {
+			if !seen[item.Value] {
+				seen[item.Value] = true
+				items = append(items, item)
+			}
+		}
+		fields[i+1].Content = items
+	}
+	var output bytes.Buffer
+	encoder := yaml.NewEncoder(&output)
+	encoder.SetIndent(2)
+	if err := encoder.Encode(&document); err != nil {
+		return "", err
+	}
+	return output.String(), nil
 }
 
 // CanonicalDigest identifies a stored template. Stored copies may use CRLF or carry a trailing
@@ -97,6 +122,11 @@ func Validate(base string) error {
 	}
 	if rules == nil {
 		return fmt.Errorf("base template is missing its rules sequence")
+	}
+	for _, item := range rules.Content {
+		if item.Kind != yaml.ScalarNode || item.Tag != "!!str" {
+			return fmt.Errorf("rules must contain strings")
+		}
 	}
 	return nil
 }

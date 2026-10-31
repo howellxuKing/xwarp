@@ -80,9 +80,9 @@ func Subscribe(c *gin.Context) {
 	//vo.Fail("This client is not supported", c)
 }
 
-// getClashRules 返回订阅规则 = 关键服务强制代理（置顶，任何模板都不能覆盖）+ 面板自定义直连/代理网站规则 + 基础规则
+// Local destinations first, then administrator exceptions and the visible template.
 func getClashRules() (string, error) {
-	return subscriptionrules.Compose(getBaseClashRules(), getCustomClashRules(), constant.ClashCriticalProxyRules)
+	return subscriptionrules.Compose(getBaseClashRules(), getCustomClashRules(), constant.ClashLocalRules)
 }
 
 // getCustomClashRules 面板「模板设置」中自定义的直连/代理网站生成的规则
