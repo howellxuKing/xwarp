@@ -151,6 +151,14 @@ def main():
                 # Registration is username-only. Generated credentials are disclosed once, not in account info.
                 system = success("/api/system/selectSystemByName", token=token3)
                 original_template = system["clashRule"]
+                # Stored automatic-group references migrate before policy checks, including
+                # terminal rules and provider download proxies.
+                system["clashRule"] = "rule-providers:\n  fixture:\n    type: inline\n    behavior: domain\n    proxy: AUTO\n    payload: ['+.example.cn']\nrules:\n  - DOMAIN,legacy-fixture.example,DIRECT\n  - RULE-SET,fixture,DIRECT\n  - MATCH,FALLBACK\n"
+                success("/api/system/updateSystemById", "POST", system, token3)
+                migrated = request(rotated)[1]
+                assert "legacy-fixture.example,DIRECT" in migrated
+                assert "proxy: PROXY" in migrated and "MATCH,PROXY" in migrated
+                assert "proxy: AUTO" not in migrated and "MATCH,FALLBACK" not in migrated
                 # 合法自定义模板保留，且第三方模板把 YouTube 写成直连也压不过强制例外块
                 system["clashRule"] = "rules:\n  - DOMAIN,admin-fixture.example,DIRECT\n  - DOMAIN-SUFFIX,youtube.com,DIRECT\n  # @XWARP-DOMESTIC@\n  - GEOIP,cn,DIRECT,no-resolve\n  - MATCH,PROXY\n"
                 success("/api/system/updateSystemById", "POST", system, token3)

@@ -14,6 +14,11 @@ import (
 // Compose protects local destinations, then honours administrator exceptions and the template.
 // No overseas rule block is secretly prepended over administrator choices.
 func Compose(base, custom, local string) (string, error) {
+	var err error
+	base, err = NormalizeLegacyGroups(base)
+	if err != nil {
+		return "", err
+	}
 	if err := Validate(base); err != nil {
 		return "", err
 	}
@@ -57,6 +62,61 @@ func Compose(base, custom, local string) (string, error) {
 	// Validate the composed result, including provider references and terminal policy.
 	if err := ValidatePolicyNode(&document); err != nil {
 		return "", err
+	}
+	var output bytes.Buffer
+	encoder := yaml.NewEncoder(&output)
+	encoder.SetIndent(2)
+	if err := encoder.Encode(&document); err != nil {
+		return "", err
+	}
+	return output.String(), nil
+}
+
+// NormalizeLegacyGroups preserves the intent of older proxy templates after automatic groups
+// are removed. It covers both routing targets (including MATCH) and provider download proxies.
+func NormalizeLegacyGroups(template string) (string, error) {
+	if err := Validate(template); err != nil {
+		return "", err
+	}
+	var document yaml.Node
+	if err := yaml.Unmarshal([]byte(template), &document); err != nil {
+		return "", err
+	}
+	changed := false
+	fields := document.Content[0].Content
+	for i := 0; i < len(fields); i += 2 {
+		if fields[i].Value == "rules" {
+			for _, item := range fields[i+1].Content {
+				parts := strings.Split(item.Value, ",")
+				index := len(parts) - 1
+				if index > 0 && strings.TrimSpace(parts[index]) == "no-resolve" {
+					index--
+				}
+				if index > 0 && (strings.TrimSpace(parts[index]) == "AUTO" || strings.TrimSpace(parts[index]) == "FALLBACK") {
+					parts[index] = "PROXY"
+					item.Value = strings.Join(parts, ",")
+					changed = true
+				}
+			}
+		}
+		if fields[i].Value == "rule-providers" && fields[i+1].Kind == yaml.MappingNode {
+			providers := fields[i+1].Content
+			for j := 1; j < len(providers); j += 2 {
+				if providers[j].Kind != yaml.MappingNode {
+					continue
+				}
+				config := providers[j].Content
+				for k := 0; k+1 < len(config); k += 2 {
+					if config[k].Value == "proxy" && (config[k+1].Value == "AUTO" || config[k+1].Value == "FALLBACK") {
+						config[k+1].Value = "PROXY"
+						changed = true
+					}
+				}
+			}
+		}
+	}
+	if !changed {
+		return template, nil
 	}
 	var output bytes.Buffer
 	encoder := yaml.NewEncoder(&output)

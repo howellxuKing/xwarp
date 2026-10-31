@@ -35,5 +35,5 @@ const (
 	TrojanPanelCrtFile      string = "trojan-panel.crt"
 	TrojanPanelKeyFile      string = "trojan-panel.key"
 
-	TrojanPanelVersion = "v2.5.4"
+	TrojanPanelVersion = "v2.5.5"
 )

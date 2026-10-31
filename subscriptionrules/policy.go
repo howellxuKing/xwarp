@@ -16,6 +16,11 @@ import (
 // foreign site whose DNS answer happens to land on a mainland IP is sent direct too. Both fail
 // only in rule mode, because global mode ignores the rule list entirely.
 func ValidatePolicy(template string) error {
+	var err error
+	template, err = NormalizeLegacyGroups(template)
+	if err != nil {
+		return err
+	}
 	if err := Validate(template); err != nil {
 		return err
 	}
