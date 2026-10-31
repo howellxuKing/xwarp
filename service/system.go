@@ -185,6 +185,10 @@ func UpdateSystemById(systemDto dto.SystemUpdateDto) error {
 		if err := subscriptionrules.Validate(clashRule); err != nil {
 			return fmt.Errorf("Clash 规则模板不合法: %w", err)
 		}
+		// 兜底直连或 GEOIP,cn 解析域名的模板会让规则模式把国外站点送去直连
+		if err := subscriptionrules.ValidatePolicy(clashRule); err != nil {
+			return fmt.Errorf("Clash 规则模板会让规则模式把国外站点送去直连: %w", err)
+		}
 	}
 	// 根据自定义名单重新生成订阅规则文件（插入在内置规则之前）
 	if err = writeClashCustomRuleFile(systemTemplateConfigBo.ClashProxyDomains, systemTemplateConfigBo.ClashDirectDomains); err != nil {

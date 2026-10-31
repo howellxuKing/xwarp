@@ -144,9 +144,9 @@ def main():
                 assert success("/api/account/clashSubscribe", token=token3) == rotated
                 # Registration is username-only. Generated credentials are disclosed once, not in account info.
                 system = success("/api/system/selectSystemByName", token=token3)
-                # 编辑过的模板仍生效，并保留占位行时继续展开大陆域名块
                 original_template = system["clashRule"]
-                system["clashRule"] = "rules:\n  - DOMAIN,admin-fixture.example,DIRECT\n  - DOMAIN-SUFFIX,youtube.com,DIRECT\n  # @XWARP-DOMESTIC@\n  - GEOIP,cn,DIRECT\n  - MATCH,DIRECT\n"
+                # 合法自定义模板保留，且第三方模板把 YouTube 写成直连也压不过强制例外块
+                system["clashRule"] = "rules:\n  - DOMAIN,admin-fixture.example,DIRECT\n  - DOMAIN-SUFFIX,youtube.com,DIRECT\n  # @XWARP-DOMESTIC@\n  - GEOIP,cn,DIRECT,no-resolve\n  - MATCH,PROXY\n"
                 success("/api/system/updateSystemById", "POST", system, token3)
                 custom_template_subscription = request(rotated)[1]
                 assert "admin-fixture.example,DIRECT" in custom_template_subscription
@@ -154,6 +154,18 @@ def main():
                 assert custom_template_subscription.index("admin-fixture.example,DIRECT") < custom_template_subscription.index("DOMAIN-SUFFIX,douyin.com,DIRECT") < custom_template_subscription.index("GEOIP,cn,DIRECT")
                 # 第三方模板把 YouTube 写成直连也不能生效：关键服务强制代理块必须排在最前面
                 assert custom_template_subscription.index("DOMAIN-SUFFIX,youtube.com,PROXY") < custom_template_subscription.index("DOMAIN-SUFFIX,youtube.com,DIRECT")
+                # 兜底直连、或 GEOIP,cn 解析域名的模板会让规则模式把国外站点送去直连，保存即拒绝
+                for unsafe in (
+                    "rules:\n  - DOMAIN,admin-fixture.example,DIRECT\n  # @XWARP-DOMESTIC@\n  - GEOIP,cn,DIRECT,no-resolve\n  - MATCH,DIRECT\n",
+                    "rules:\n  - DOMAIN,admin-fixture.example,DIRECT\n  # @XWARP-DOMESTIC@\n  - GEOIP,cn,DIRECT\n  - MATCH,PROXY\n",
+                ):
+                    system["clashRule"] = unsafe
+                    rejected("/api/system/updateSystemById", "POST", system, token3)
+                # 已经存进去的历史坏模板在订阅侧也要被拦下，回落到内置默认规则
+                (folder / "config/template/template-clash-rule.yaml").write_text("rules:\n  - DOMAIN,admin-fixture.example,DIRECT\n  # @XWARP-DOMESTIC@\n  - GEOIP,cn,DIRECT\n  - MATCH,DIRECT\n")
+                fallback_status, fallback_rules, _ = request(rotated)
+                assert fallback_status == 200 and "admin-fixture.example" not in fallback_rules
+                assert "GEOIP,cn,DIRECT,no-resolve" in fallback_rules
                 # 缺少占位行的模板必须被拒绝，而不是静默丢失大陆域名
                 system["clashRule"] = "rules:\n  - DOMAIN,admin-fixture.example,DIRECT\n  - MATCH,PROXY\n"
                 rejected("/api/system/updateSystemById", "POST", system, token3)
