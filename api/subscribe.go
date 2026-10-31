@@ -129,7 +129,7 @@ func getBaseClashRules() string {
 // isBuiltinClashRules 判断模板是否为历史版本的内置默认内容（可安全替换为当前默认）。
 func isBuiltinClashRules(digest, normalized string) bool {
 	switch digest {
-	case constant.ClashRulesV233SHA256, constant.ClashRulesPreviousSHA256, constant.ClashRulesV250SHA256, constant.ClashRulesV251SHA256, constant.ClashRulesV252SHA256, constant.ClashRulesV254SHA256:
+	case constant.ClashRulesV233SHA256, constant.ClashRulesPreviousSHA256, constant.ClashRulesV250SHA256, constant.ClashRulesV251SHA256, constant.ClashRulesV252SHA256, constant.ClashRulesV254SHA256, constant.ClashRulesV255SHA256:
 		return true
 	}
 	return normalized == strings.TrimSpace(constant.ClashRules) ||

@@ -26,12 +26,15 @@ const ClashRulesV252SHA256 = "c4fbbad7b4038d9e4eacb8727f3dbd09b57cbf9d0d5ebd58ae
 // ClashRulesV254SHA256 identifies the unmodified v2.5.4 default template, the first one that keeps
 // GEOIP,cn on no-resolve so a foreign domain can never be matched by its resolved IP.
 const ClashRulesV254SHA256 = "63615e724059803f6394ed014c8bb949bcc01c4596f5cd884201981a089d3a80"
+const ClashRulesV255SHA256 = "ae932dd94ae01c27612f6e13ea11705ffe0b0fe5ca69780751617a592e2bc4ef"
 
 // Domestic domains are expanded locally at subscription generation.
 const ClashDomesticMarker = "@XWARP-DOMESTIC@"
-const ClashRulesV3SHA256 = "ae932dd94ae01c27612f6e13ea11705ffe0b0fe5ca69780751617a592e2bc4ef"
+const ClashRulesV3SHA256 = "4b66b991d912086d89633e1401b7f706a908f5a18d4a773326647a33324bc92c"
 
 // Explicit local ranges only; fake-IP benchmark ranges are not LAN.
+const ClashIPv6LocalRule = "AND,((IP-CIDR6,fc00::/7,no-resolve),(NOT,((IP-CIDR6,fdfe:dcba:9876::/64,no-resolve)))),DIRECT"
+
 const ClashLocalRules = `  - DOMAIN,localhost,DIRECT
   - DOMAIN-SUFFIX,local,DIRECT
   - DOMAIN-SUFFIX,lan,DIRECT
@@ -40,7 +43,7 @@ const ClashLocalRules = `  - DOMAIN,localhost,DIRECT
   - IP-CIDR,172.16.0.0/12,DIRECT,no-resolve
   - IP-CIDR,192.168.0.0/16,DIRECT,no-resolve
   - IP-CIDR6,::1/128,DIRECT,no-resolve
-  - IP-CIDR6,fc00::/7,DIRECT,no-resolve
+` + "  - " + ClashIPv6LocalRule + "\n" + `
   - IP-CIDR6,fe80::/10,DIRECT,no-resolve
 `
 

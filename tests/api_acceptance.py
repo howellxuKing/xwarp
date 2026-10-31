@@ -102,7 +102,8 @@ def main():
                 assert request(subscription)[0] == 200 and "rules:" in request(subscription)[1]
                 initial_rules = request(subscription)[1]
                 assert "DOMAIN-SUFFIX,douyin.com,DIRECT" in initial_rules, "Bundled domestic domain routing missing"
-                assert "IP-CIDR6,fc00::/7,DIRECT,no-resolve" in initial_rules
+                assert "AND,((IP-CIDR6,fc00::/7,no-resolve),(NOT,((IP-CIDR6,fdfe:dcba:9876::/64,no-resolve)))),DIRECT" in initial_rules
+                assert "- IP-CIDR6,fc00::/7,DIRECT" not in initial_rules
                 assert "rule-providers:" in initial_rules
                 assert initial_rules.index("RULE-SET,direct,DIRECT") < initial_rules.index("RULE-SET,cncidr,DIRECT,no-resolve") < initial_rules.index("MATCH,PROXY")
                 assert "GEOIP,private," not in initial_rules, "mihomo only special-cases GEOIP,lan"

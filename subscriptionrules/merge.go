@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"gopkg.in/yaml.v3"
+	"trojan-panel/model/constant"
 )
 
 // Compose protects local destinations, then honours administrator exceptions and the template.
@@ -88,6 +89,11 @@ func NormalizeLegacyGroups(template string) (string, error) {
 		if fields[i].Value == "rules" {
 			for _, item := range fields[i+1].Content {
 				parts := strings.Split(item.Value, ",")
+				if len(parts) >= 3 && (strings.EqualFold(strings.TrimSpace(parts[0]), "IP-CIDR6") || strings.EqualFold(strings.TrimSpace(parts[0]), "IP-CIDR")) && strings.EqualFold(strings.TrimSpace(parts[1]), "fc00::/7") && strings.EqualFold(strings.TrimSpace(parts[2]), "DIRECT") {
+					item.Value = constant.ClashIPv6LocalRule
+					changed = true
+					continue
+				}
 				index := len(parts) - 1
 				if index > 0 && strings.TrimSpace(parts[index]) == "no-resolve" {
 					index--

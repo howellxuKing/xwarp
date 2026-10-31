@@ -120,3 +120,14 @@ func TestComposeMigratesRemovedAutomaticGroups(t *testing.T) {
 		t.Fatal("removed groups left an unresolved policy reference")
 	}
 }
+
+func TestComposeMigratesUnsafeIPv6PrivateRule(t *testing.T) {
+	base := "rules:\n  - IP-CIDR6,fc00::/7,DIRECT,no-resolve\n  - MATCH,PROXY\n"
+	got, err := Compose(base, "", constant.ClashLocalRules)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(got, "- IP-CIDR6,fc00::/7,DIRECT") || strings.Count(got, constant.ClashIPv6LocalRule) != 1 {
+		t.Fatal("legacy private IPv6 rule still intercepts the Fake-IP range")
+	}
+}
