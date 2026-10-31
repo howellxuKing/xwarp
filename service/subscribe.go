@@ -11,6 +11,7 @@ import (
 	"trojan-panel/model/bo"
 	"trojan-panel/model/constant"
 	"trojan-panel/model/vo"
+	"trojan-panel/subscriptionrules"
 	"trojan-panel/util"
 )
 
@@ -254,14 +255,7 @@ func SubscribeClash(pass string) (*model.Account, string, []byte, vo.SystemVo, e
 			proxies = append(proxies, *item.Name)
 		}
 	}
-	proxyGroups := make([]bo.ProxyGroup, 0, 1)
-	if len(proxies) == 0 {
-		// 没有节点时仍生成可加载的配置，避免客户端整份订阅报错
-		proxyGroups = append(proxyGroups, bo.ProxyGroup{Name: "PROXY", Type: "select", Proxies: []string{"REJECT"}})
-	} else {
-		proxyGroups = append(proxyGroups, bo.ProxyGroup{Name: "PROXY", Type: "select", Proxies: proxies})
-	}
-	clashConfig.ProxyGroups = proxyGroups
+	clashConfig.ProxyGroups = subscriptionrules.ProxyGroups(proxies)
 	clashConfig.Proxies = ClashConfigInterface
 
 	clashConfigYaml, err := yaml.Marshal(&clashConfig)

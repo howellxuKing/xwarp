@@ -35,7 +35,7 @@ func TestClashVergeKernelAcceptsCloudDefaults(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	config := bo.ClashConfig{Mode: "rule", Proxies: []interface{}{bo.Socks{Name: "candidate", Type: "socks5", Server: "127.0.0.1", Port: 9}}, ProxyGroups: []bo.ProxyGroup{{Name: "PROXY", Type: "select", Proxies: []string{"candidate"}}}}
+	config := bo.ClashConfig{Mode: "rule", Proxies: []interface{}{bo.Socks{Name: "candidate", Type: "socks5", Server: "127.0.0.1", Port: 9}}, ProxyGroups: ProxyGroups([]string{"candidate"})}
 	prefix, err := yaml.Marshal(config)
 	if err != nil {
 		t.Fatal(err)
