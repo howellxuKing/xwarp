@@ -30,10 +30,29 @@ const ClashRulesV255SHA256 = "ae932dd94ae01c27612f6e13ea11705ffe0b0fe5ca69780751
 
 // Domestic domains are expanded locally at subscription generation.
 const ClashDomesticMarker = "@XWARP-DOMESTIC@"
+
+// ClashRulesV3SHA256 identifies the v2.5.5-v2.5.7 cloud rule template. It still let
+// every IPv6 destination through, which broke apps on clients whose line has no IPv6
+// egress while the TUN interface still advertises IPv6.
 const ClashRulesV3SHA256 = "4b66b991d912086d89633e1401b7f706a908f5a18d4a773326647a33324bc92c"
+
+// ClashRulesV4SHA256 identifies the current template, the first one that rejects IPv6
+// beyond the local ranges.
+const ClashRulesV4SHA256 = "2f1cc27d645fa108bd7bd48c364301ffa5d0d1f217fe0e38530247581cfaaccd"
 
 // Explicit local ranges only; fake-IP benchmark ranges are not LAN.
 const ClashIPv6LocalRule = "AND,((IP-CIDR6,fc00::/7,no-resolve),(NOT,((IP-CIDR6,fdfe:dcba:9876::/64,no-resolve)))),DIRECT"
+
+// ClashIPv6NoEgressRule turns "IPv6 exists on the interface but not on the line" into a
+// fast failure instead of a hang.
+//
+// A TUN client still hands IPv6 addresses to applications when the node has no IPv6
+// uplink. Chat apps then open a file transfer over IPv6, the packets leave through TUN
+// and never come back, and the user sees "sending interrupted" while small messages
+// (IPv4) keep working. Rejecting IPv6 beyond the local ranges makes the app retry over
+// IPv4 immediately. Deployments that do have IPv6 can place IP-CIDR6,::/0,PROXY (or
+// DIRECT) above this line to override it.
+const ClashIPv6NoEgressRule = "IP-CIDR6,::/0,REJECT"
 
 const ClashLocalRules = `  - DOMAIN,localhost,DIRECT
   - DOMAIN-SUFFIX,local,DIRECT
@@ -67,7 +86,7 @@ const ClashRules = `rule-providers:
     url: https://testingcf.jsdelivr.net/gh/Loyalsoldier/clash-rules@release/cncidr.txt
 
 rules:
-` + ClashLocalRules + `
+` + ClashLocalRules + "  - " + ClashIPv6NoEgressRule + `
   # 手动网站例外在本地规则之后生效。广告拦截默认关闭。
   # 常用国内站点保底，完整分类由下面的规则集维护。
   - DOMAIN-SUFFIX,qq.com,DIRECT

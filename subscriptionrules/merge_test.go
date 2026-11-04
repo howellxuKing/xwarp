@@ -99,13 +99,43 @@ func TestComposeHonoursManualExceptionsAfterLocal(t *testing.T) {
 	}
 }
 
+func TestTemplateRejectsIPv6BeyondLocalRanges(t *testing.T) {
+	var document struct {
+		Rules []string `yaml:"rules"`
+	}
+	if err := yaml.Unmarshal([]byte(constant.ClashRules), &document); err != nil {
+		t.Fatalf("default template is not valid YAML: %v", err)
+	}
+	position := map[string]int{}
+	for i, rule := range document.Rules {
+		position[rule] = i
+	}
+	local, ok := position["IP-CIDR6,fe80::/10,DIRECT,no-resolve"]
+	if !ok {
+		t.Fatal("local IPv6 rule missing")
+	}
+	reject, ok := position[constant.ClashIPv6NoEgressRule]
+	if !ok {
+		t.Fatalf("missing %q: clients without an IPv6 uplink then hang instead of retrying over IPv4",
+			constant.ClashIPv6NoEgressRule)
+	}
+	if reject < local {
+		t.Fatal("IPv6 reject must stay after the local ranges, otherwise LAN IPv6 stops working")
+	}
+	for _, later := range []string{"RULE-SET,cncidr,DIRECT,no-resolve", "MATCH,PROXY"} {
+		if index, present := position[later]; present && reject > index {
+			t.Fatalf("%q must come before %q, got %d > %d", constant.ClashIPv6NoEgressRule, later, reject, index)
+		}
+	}
+}
+
 func TestDefaultTemplateDigest(t *testing.T) {
-	if got := CanonicalDigest(constant.ClashRules); got != constant.ClashRulesV3SHA256 {
-		t.Fatalf("update ClashRulesV3SHA256 after editing the default template: got %s", got)
+	if got := CanonicalDigest(constant.ClashRules); got != constant.ClashRulesV4SHA256 {
+		t.Fatalf("update ClashRulesV4SHA256 after editing the default template: got %s", got)
 	}
 	// A saved copy is compared after CRLF normalization, so either line ending must match.
 	saved := strings.ReplaceAll(constant.ClashRules, "\n", "\r\n") + "\r\n"
-	if got := CanonicalDigest(saved); got != constant.ClashRulesV3SHA256 {
+	if got := CanonicalDigest(saved); got != constant.ClashRulesV4SHA256 {
 		t.Fatalf("CRLF copy did not match: got %s", got)
 	}
 }
