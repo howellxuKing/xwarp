@@ -14,6 +14,8 @@ import (
 
 // Compose protects local destinations, then honours administrator exceptions and the template.
 // No overseas rule block is secretly prepended over administrator choices.
+// The three Windows process direct rules are then pinned after LAN and IPv6 safety
+// rules so every subscription carries them once, ahead of ordinary routing.
 func Compose(base, custom, local string) (string, error) {
 	var err error
 	base, err = NormalizeLegacyGroups(base)
@@ -59,6 +61,7 @@ func Compose(base, custom, local string) (string, error) {
 			}
 		}
 		fields[i+1].Content = items
+		pinProcessDirectRules(fields[i+1])
 	}
 	// Validate the composed result, including provider references and terminal policy.
 	if err := ValidatePolicyNode(&document); err != nil {
@@ -71,6 +74,91 @@ func Compose(base, custom, local string) (string, error) {
 		return "", err
 	}
 	return output.String(), nil
+}
+
+// safety rules stay ahead of the Windows process direct rules. The IPv6 reject is
+// included so those processes cannot bypass it and hang on a line without IPv6.
+var safetyRuleSet = func() map[string]bool {
+	var rules []string
+	if err := yaml.Unmarshal([]byte(constant.ClashLocalRules), &rules); err != nil {
+		panic("ClashLocalRules is not a YAML sequence: " + err.Error())
+	}
+	set := map[string]bool{
+		constant.ClashIPv6NoEgressRule: true,
+		constant.ClashIPv6LocalRule:    true,
+	}
+	for _, rule := range rules {
+		set[rule] = true
+	}
+	return set
+}()
+
+func isPinnedProcessDirect(rule string) bool {
+	parts := strings.Split(rule, ",")
+	if len(parts) != 3 {
+		return false
+	}
+	for i := range parts {
+		parts[i] = strings.TrimSpace(parts[i])
+	}
+	if !strings.EqualFold(parts[0], "PROCESS-NAME") || !strings.EqualFold(parts[2], "DIRECT") {
+		return false
+	}
+	switch strings.ToLower(parts[1]) {
+	case "360chromex.exe", "wechat.exe", "weixin.exe":
+		return true
+	default:
+		return false
+	}
+}
+
+// pinProcessDirectRules inserts the three process direct rules once, immediately
+// after the IPv6 reject when the template still has it, otherwise after the leading
+// LAN/IPv6 local rules. Rules already above that reject, including administrator
+// domain exceptions, stay above it. Other rules keep their relative order. Case
+// and spacing variants of the same three direct rules collapse to the canonical text.
+func pinProcessDirectRules(seq *yaml.Node) {
+	filtered := make([]*yaml.Node, 0, len(seq.Content))
+	for _, item := range seq.Content {
+		if item.Kind == yaml.ScalarNode && isPinnedProcessDirect(item.Value) {
+			continue
+		}
+		filtered = append(filtered, item)
+	}
+	insertAt := 0
+	for insertAt < len(filtered) && filtered[insertAt].Kind == yaml.ScalarNode && safetyRuleSet[filtered[insertAt].Value] {
+		insertAt++
+	}
+	for i, item := range filtered {
+		if item.Kind == yaml.ScalarNode && item.Value == constant.ClashIPv6NoEgressRule {
+			insertAt = i + 1
+			break
+		}
+	}
+	for i, item := range filtered {
+		if item.Kind != yaml.ScalarNode {
+			continue
+		}
+		kind := strings.ToUpper(strings.TrimSpace(strings.Split(item.Value, ",")[0]))
+		if (kind == "MATCH" || kind == "FINAL") && insertAt > i {
+			insertAt = i
+			break
+		}
+	}
+	wanted := []string{
+		constant.ClashProcessDirectRule360ChromeX,
+		constant.ClashProcessDirectRuleWeChat,
+		constant.ClashProcessDirectRuleWeixin,
+	}
+	pinned := make([]*yaml.Node, len(wanted))
+	for i, rule := range wanted {
+		pinned[i] = &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: rule}
+	}
+	next := make([]*yaml.Node, 0, len(filtered)+len(pinned))
+	next = append(next, filtered[:insertAt]...)
+	next = append(next, pinned...)
+	next = append(next, filtered[insertAt:]...)
+	seq.Content = next
 }
 
 // NormalizeLegacyGroups preserves the intent of older proxy templates after automatic groups

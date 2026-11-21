@@ -98,40 +98,27 @@ func getCustomClashRules() string {
 // getBaseClashRules 返回基础订阅规则
 // 优先读取面板可编辑的规则模板文件（config/template/template-clash-rule.yaml，系统设置→Clash规则 保存后即写入）；
 // 文件缺失、为空或匹配已知旧版默认内容时，采用当前内置规则。
-// 管理员修改过的模板会保留，但同样会展开大陆域名占位行。
+// 管理员修改过的模板会保留，并展开大陆域名占位行。进程直连不在这里改模板，由 Compose 补进订阅。
 func getBaseClashRules() string {
 	content, err := os.ReadFile(constant.ClashRuleFilePath)
-	if err != nil {
-		return service.DefaultClashRules()
-	}
-	rules := strings.TrimSpace(string(content))
-	normalizedRules := strings.ReplaceAll(rules, "\r\n", "\n")
-	rulesDigest := subscriptionrules.CanonicalDigest(string(content))
-	if rules == "" || isBuiltinClashRules(rulesDigest, normalizedRules) {
-		return service.DefaultClashRules()
-	}
-	// 自定义模板也要展开大陆域名块，否则国内网站会退化为按 IP 判定
-	applied := rules
-	if strings.Contains(rules, constant.ClashDomesticMarker) {
-		var applyErr error
-		applied, applyErr = service.ApplyDomesticRules(rules)
-		if applyErr != nil { return service.DefaultClashRules() }
-	}
-	// 模板把未匹配流量兜底成直连、或让 GEOIP,cn 解析域名时，规则模式会把国外站点送去直连。
-	// 这类模板直接作废，回落到内置默认规则，避免客户端拿到一份「全局能用、规则不能用」的配置。
-	if policyErr := subscriptionrules.ValidatePolicy(applied); policyErr != nil {
-		logrus.Warnf("自定义 Clash 规则模板不满足分流模型，本次订阅改用内置默认规则: %v", policyErr)
-		return service.DefaultClashRules()
-	}
-	return applied
+	return subscriptionrules.ResolveBase(string(content), err, service.DefaultClashRules(), expandSavedClashRules, acceptSavedClashRules)
 }
 
-// isBuiltinClashRules 判断模板是否为历史版本的内置默认内容（可安全替换为当前默认）。
-func isBuiltinClashRules(digest, normalized string) bool {
-	switch digest {
-	case constant.ClashRulesV233SHA256, constant.ClashRulesPreviousSHA256, constant.ClashRulesV250SHA256, constant.ClashRulesV251SHA256, constant.ClashRulesV252SHA256, constant.ClashRulesV254SHA256, constant.ClashRulesV255SHA256, constant.ClashRulesV3SHA256:
-		return true
+// expandSavedClashRules keeps a customized template, expanding the legacy mainland marker when present.
+func expandSavedClashRules(rules string) (string, error) {
+	if !strings.Contains(rules, constant.ClashDomesticMarker) {
+		return rules, nil
 	}
-	return normalized == strings.TrimSpace(constant.ClashRules) ||
-		normalized == "rules:\n  - GEOIP,CN,DIRECT\n  - MATCH,PROXY"
+	// 自定义模板也要展开大陆域名块，否则国内网站会退化为按 IP 判定
+	return service.ApplyDomesticRules(rules)
+}
+
+func acceptSavedClashRules(rules string) error {
+	// 模板把未匹配流量兜底成直连、或让 GEOIP,cn 解析域名时，规则模式会把国外站点送去直连。
+	// 这类模板直接作废，回落到内置默认规则，避免客户端拿到一份「全局能用、规则不能用」的配置。
+	if policyErr := subscriptionrules.ValidatePolicy(rules); policyErr != nil {
+		logrus.Warnf("自定义 Clash 规则模板不满足分流模型，本次订阅改用内置默认规则: %v", policyErr)
+		return policyErr
+	}
+	return nil
 }
