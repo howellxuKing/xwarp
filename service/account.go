@@ -143,6 +143,19 @@ func UpdateAccountById(token string, account *model.Account) error {
 		return err
 	}
 	defer redis.RsUnLock(mutex)
+	if account.Username != nil {
+		current, err := dao.SelectAccountById(account.Id)
+		if err != nil {
+			return err
+		}
+		stored := ""
+		if current.Username != nil {
+			stored = *current.Username
+		}
+		if err := util.SameOrValidUsername(stored, *account.Username); err != nil {
+			return err
+		}
+	}
 	if account.Pass != nil && *account.Pass != "" {
 		username, _, err := dao.SecurityAccount(*account.Id)
 		if err != nil {

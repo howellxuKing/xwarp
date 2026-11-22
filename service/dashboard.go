@@ -23,10 +23,7 @@ func TrafficRank() ([]vo.AccountTrafficRankVo, error) {
 	roleIds := []uint{constant.USER}
 	trafficRank, err := dao.TrafficRank(roleIds)
 	for index, item := range trafficRank {
-		usernameLen := len(item.Username)
-		prefix := item.Username[0:2]
-		suffix := item.Username[usernameLen-2:]
-		trafficRank[index].Username = fmt.Sprintf("%s****%s", prefix, suffix)
+		trafficRank[index].Username = util.MaskTrafficRankName(item.Username)
 	}
 	if err != nil {
 		return nil, err

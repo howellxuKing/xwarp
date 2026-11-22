@@ -364,33 +364,35 @@ func DeleteNodeById(token string, id *uint) error {
 	if err != nil {
 		return err
 	}
+	defer redis.RsUnLock(mutex)
 	node, err := dao.SelectNodeById(id)
 	if err != nil {
 		return err
 	}
-	GrpcRemoveNode(token, *node.NodeServerIp, *node.NodeServerGrpcPort, *node.Port, *node.NodeTypeId)
-	if *node.NodeTypeId == constant.Xray {
-		if err := dao.DeleteNodeXrayById(node.NodeSubId); err != nil {
-			return err
+	// Keep the panel record when the core still has the listener. The lock is
+	// released on every return so a later delete can retry.
+	return util.FinishRemoteThenLocal(func() error {
+		return GrpcRemoveNode(token, *node.NodeServerIp, *node.NodeServerGrpcPort, *node.Port, *node.NodeTypeId)
+	}, func() error {
+		if *node.NodeTypeId == constant.Xray {
+			if err := dao.DeleteNodeXrayById(node.NodeSubId); err != nil {
+				return err
+			}
+		} else if *node.NodeTypeId == constant.TrojanGo {
+			if err := dao.DeleteNodeTrojanGoById(node.NodeSubId); err != nil {
+				return err
+			}
+		} else if *node.NodeTypeId == constant.Hysteria {
+			if err := dao.DeleteNodeHysteriaById(node.NodeSubId); err != nil {
+				return err
+			}
+		} else if *node.NodeTypeId == constant.Hysteria2 {
+			if err := dao.DeleteNodeHysteria2ById(node.NodeSubId); err != nil {
+				return err
+			}
 		}
-	} else if *node.NodeTypeId == constant.TrojanGo {
-		if err := dao.DeleteNodeTrojanGoById(node.NodeSubId); err != nil {
-			return err
-		}
-	} else if *node.NodeTypeId == constant.Hysteria {
-		if err := dao.DeleteNodeHysteriaById(node.NodeSubId); err != nil {
-			return err
-		}
-	} else if *node.NodeTypeId == constant.Hysteria2 {
-		if err := dao.DeleteNodeHysteria2ById(node.NodeSubId); err != nil {
-			return err
-		}
-	}
-	if err = dao.DeleteNodeById(id); err != nil {
-		return err
-	}
-	redis.RsUnLock(mutex)
-	return nil
+		return dao.DeleteNodeById(id)
+	})
 }
 
 func UpdateNodeById(token string, nodeUpdateDto *dto.NodeUpdateDto) error {
@@ -429,7 +431,7 @@ func UpdateNodeById(token string, nodeUpdateDto *dto.NodeUpdateDto) error {
 		return err
 	}
 	// Grpc的操作
-	GrpcRemoveNode(token, *nodeEntity.NodeServerIp, *nodeEntity.NodeServerGrpcPort, *nodeEntity.Port, *nodeEntity.NodeTypeId)
+	_ = GrpcRemoveNode(token, *nodeEntity.NodeServerIp, *nodeEntity.NodeServerGrpcPort, *nodeEntity.Port, *nodeEntity.NodeTypeId)
 	GrpcAddNode(token, *nodeServer.Ip, *nodeServer.GrpcPort, &core.NodeAddDto{
 		NodeTypeId: uint64(*nodeUpdateDto.NodeTypeId),
 		Port:       uint64(*nodeUpdateDto.Port),
@@ -851,8 +853,8 @@ func GrpcAddNode(token string, ip string, grpcPort uint, nodeAddDto *core.NodeAd
 	_ = core.AddNode(token, ip, grpcPort, nodeAddDto)
 }
 
-func GrpcRemoveNode(token string, ip string, grpcPort uint, port uint, nodeTypeId uint) {
-	_ = core.RemoveNode(token, ip, grpcPort, &core.NodeRemoveDto{
+func GrpcRemoveNode(token string, ip string, grpcPort uint, port uint, nodeTypeId uint) error {
+	return core.RemoveNode(token, ip, grpcPort, &core.NodeRemoveDto{
 		NodeTypeId: uint64(nodeTypeId),
 		Port:       uint64(port),
 	})
