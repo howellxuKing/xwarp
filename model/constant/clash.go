@@ -36,9 +36,26 @@ const ClashDomesticMarker = "@XWARP-DOMESTIC@"
 // egress while the TUN interface still advertises IPv6.
 const ClashRulesV3SHA256 = "4b66b991d912086d89633e1401b7f706a908f5a18d4a773326647a33324bc92c"
 
-// ClashRulesV4SHA256 identifies the current template, the first one that rejects IPv6
-// beyond the local ranges.
+// ClashRulesV4SHA256 identifies the unmodified template that rejects IPv6 beyond the
+// local ranges, before the Windows process direct rules were added.
 const ClashRulesV4SHA256 = "2f1cc27d645fa108bd7bd48c364301ffa5d0d1f217fe0e38530247581cfaaccd"
+
+// ClashRulesV5SHA256 identifies the current template. It keeps the V4 routing model
+// and directs 360ChromeX, WeChat and Weixin after the IPv6 reject.
+const ClashRulesV5SHA256 = "27abe8eedb303f1a0c7651bc4fad74c0bbae46d6edb430797fd6b2a062fd2228"
+
+// Windows process direct rules. 360ChromeX.exe is the whole 360 Chrome X browser.
+// WeChat.exe is classic WeChat; Weixin.exe is WeChat 4.x. These are ordinary rules
+// in the subscription list, not Clash Verge prepend/append/delete overrides.
+const (
+	ClashProcessDirectRule360ChromeX = "PROCESS-NAME,360ChromeX.exe,DIRECT"
+	ClashProcessDirectRuleWeChat     = "PROCESS-NAME,WeChat.exe,DIRECT"
+	ClashProcessDirectRuleWeixin     = "PROCESS-NAME,Weixin.exe,DIRECT"
+)
+
+const ClashProcessDirectRules = "  - " + ClashProcessDirectRule360ChromeX + "\n" +
+	"  - " + ClashProcessDirectRuleWeChat + "\n" +
+	"  - " + ClashProcessDirectRuleWeixin + "\n"
 
 // Explicit local ranges only; fake-IP benchmark ranges are not LAN.
 const ClashIPv6LocalRule = "AND,((IP-CIDR6,fc00::/7,no-resolve),(NOT,((IP-CIDR6,fdfe:dcba:9876::/64,no-resolve)))),DIRECT"
@@ -86,7 +103,7 @@ const ClashRules = `rule-providers:
     url: https://testingcf.jsdelivr.net/gh/Loyalsoldier/clash-rules@release/cncidr.txt
 
 rules:
-` + ClashLocalRules + "  - " + ClashIPv6NoEgressRule + `
+` + ClashLocalRules + "  - " + ClashIPv6NoEgressRule + "\n" + ClashProcessDirectRules + `
   # 手动网站例外在本地规则之后生效。广告拦截默认关闭。
   # 常用国内站点保底，完整分类由下面的规则集维护。
   - DOMAIN-SUFFIX,qq.com,DIRECT
