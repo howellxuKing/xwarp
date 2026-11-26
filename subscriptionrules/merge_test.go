@@ -141,13 +141,15 @@ func TestDefaultTemplateDigest(t *testing.T) {
 }
 
 func TestComposeMigratesRemovedAutomaticGroups(t *testing.T) {
+	// FALLBACK is a member of the PROXY selector, not a routing policy.
+	// An old template that names AUTO or FALLBACK still lands on PROXY.
 	base := "rules:\n  - DOMAIN-SUFFIX,example.org,AUTO\n  - DOMAIN-SUFFIX,example.net,FALLBACK\n  - MATCH,PROXY\n"
 	got, err := Compose(base, "", constant.ClashLocalRules)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if strings.Contains(got, ",AUTO") || strings.Contains(got, ",FALLBACK") || !strings.Contains(got, "example.org,PROXY") {
-		t.Fatal("removed groups left an unresolved policy reference")
+		t.Fatal("automatic group names must not replace PROXY in routing rules")
 	}
 }
 
